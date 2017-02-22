@@ -158,6 +158,7 @@ int main(void)
   SystemClock_Config();
 
   /* Initialize all configured peripherals */
+
   MX_GPIO_Init();
   MX_ADC1_Init();
   MX_TIM1_Init();
@@ -165,6 +166,7 @@ int main(void)
   MX_ADC3_Init();
   MX_TIM4_Init();
   MX_TIM3_Init();
+
   MX_USB_DEVICE_Init();
 
   /* USER CODE BEGIN 2 */
@@ -731,7 +733,7 @@ void Error_Handler(void)
   /* USER CODE BEGIN Error_Handler */
 	/* User can add his own implementation to report the HAL error return state */
 	while (1) {
-		printUsb("Error");
+
 	}
   /* USER CODE END Error_Handler */ 
 }
