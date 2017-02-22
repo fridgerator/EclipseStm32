@@ -41,13 +41,27 @@
  ******************************************************************************
  */
 /* Includes ------------------------------------------------------------------*/
-#include "main.h"
-#include "stm32f3xx_hal.h"
-#include "usb_device.h"
 
-#include "usbd_cdc_if.h"
-
-
+#include <main.h>
+#include <stdio.h>
+#include <stm32_hal_legacy.h>
+#include <stm32f303xc.h>
+#include <stm32f3xx.h>
+#include <stm32f3xx_hal.h>
+#include <stm32f3xx_hal_adc.h>
+#include <stm32f3xx_hal_adc_ex.h>
+#include <stm32f3xx_hal_cortex.h>
+#include <stm32f3xx_hal_def.h>
+#include <stm32f3xx_hal_flash.h>
+#include <stm32f3xx_hal_gpio.h>
+#include <stm32f3xx_hal_rcc.h>
+#include <stm32f3xx_hal_rcc_ex.h>
+#include <stm32f3xx_hal_tim.h>
+#include <stm32f3xx_hal_tim_ex.h>
+#include <sys/_stdint.h>
+#include <usb_device.h>
+#include <usbd_cdc.h>
+#include <usbd_def.h>
 
 /* USER CODE BEGIN Includes */
 
@@ -63,6 +77,19 @@ TIM_HandleTypeDef htim4;
 TIM_HandleTypeDef htim8;
 
 /* USER CODE BEGIN PV */
+
+int button1On = 0;
+int button2On = 0;
+int button2Count = 0;
+int button1Count = 0;
+int UNBOUNCE_CNT = 1000;
+int needsReset = 0;
+
+int32_t enc1;
+int32_t enc2;
+int32_t enc1Old;
+int32_t enc2Old;
+
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE END PV */
@@ -89,55 +116,139 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
 /* USER CODE END 0 */
 
+uint8_t printUsb(char* buf) {
+	USBD_CDC_HandleTypeDef *hcdc =
+			(USBD_CDC_HandleTypeDef*) hUsbDeviceFS.pClassData;
+	uint8_t result = USBD_OK;
+
+	uint16_t Len = sizeof(buf);
+	/* USER CODE BEGIN 7 */
+	USBD_CDC_SetTxBuffer(&hUsbDeviceFS, buf[0], Len);
+
+	do {
+		result |= USBD_CDC_TransmitPacket(&hUsbDeviceFS);
+	} while ((result != USBD_OK) && (result != USBD_FAIL));
+
+	if ((Len % 64 == 0) && (result == USBD_OK)) {
+		while (hcdc->TxState)
+			;
+		USBD_CDC_SetTxBuffer(&hUsbDeviceFS, buf, 0);
+		result |= USBD_CDC_TransmitPacket(&hUsbDeviceFS);
+	}
+
+	return result;
+}
+
 int main(void) {
 
-	/* USER CODE BEGIN 1 */
-
-	/* USER CODE END 1 */
-
-	/* MCU Configuration----------------------------------------------------------*/
-
-	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
 	HAL_Init();
-
-	/* Configure the system clock */
 	SystemClock_Config();
 
-	/* Initialize all configured peripherals */
 	MX_GPIO_Init();
 	MX_ADC1_Init();
-	MX_TIM1_Init();
-	MX_TIM8_Init();
+	MX_TIM1_Init(); // PWM1 pc13 tim1_ch1n, PWM2 pb14 tim1_ch2n
+	MX_TIM8_Init(); // PWM3 pa7 tim8_ch1n, PWM4 pb0 tim8_ch2n
 	MX_ADC3_Init();
 	MX_TIM4_Init();
 	MX_TIM3_Init();
 	MX_USB_DEVICE_Init();
 
-	/* USER CODE BEGIN 2 */
-
-	/* USER CODE END 2 */
-
-	/* Infinite loop */
-	/* USER CODE BEGIN WHILE */
 	uint32_t g_ADCValue1 = 0;
 	uint32_t g_ADCValue3 = 0;
+
+	uint32_t GPIO_Pin_Button1 = GPIO_PIN_9;   //PA9
+	uint32_t GPIO_Pin_Button2 = GPIO_PIN_10;  //PA10
 	while (1) {
-		/* USER CODE END WHILE */
 		if (HAL_ADC_PollForConversion(&hadc1, 1000000) == HAL_OK) {
 			g_ADCValue1 = HAL_ADC_GetValue(&hadc1);
 		}
 		if (HAL_ADC_PollForConversion(&hadc3, 1000000) == HAL_OK) {
 			g_ADCValue3 = HAL_ADC_GetValue(&hadc3);
 		}
-		/* USER CODE BEGIN 3 */
-		uint8_t buffer[255];
-		sprintf(buffer, "Analog1= %d, Analog3=%d", g_ADCValue1, g_ADCValue3);
-		int numElements = sizeof(buffer);
-		while (USBD_OK != CDC_Transmit_FS(buffer, numElements)) {
+		char buffer[255];
+		sprintf(buffer, "Analog1= %u, Analog3=%u\n", g_ADCValue1, g_ADCValue3);
+		printUsb(buffer);
+
+		button1On = 1;
+		button2On = 1;
+
+		if (HAL_GPIO_ReadPin(GPIOA, GPIO_Pin_Button1) == GPIO_PIN_SET) {
+			if (button1Count < UNBOUNCE_CNT)
+				button1Count++;
+			else {
+				button1On = 1;
+				button1Count = 0;
+				needsReset = 1;
+				printUsb("Button UP is set!\n");
+			}
+		} else {
+			button1Count = 0;
+		}
+
+		if (HAL_GPIO_ReadPin(GPIOA, GPIO_Pin_Button2) == GPIO_PIN_SET) {
+			if (button2Count < UNBOUNCE_CNT)
+				button2Count++;
+			else {
+				button2On = 1;
+				button2Count = 0;
+				needsReset = 1;
+				printUsb("Button DOWN is set!\n");
+			}
+		} else {
+			button2Count = 0;
+		}
+		if (button1On == 0 && button2On == 0) {
+			//reset stepper drivers BTM7752G
+			if (needsReset == 1) {
+				//INH2 FB11, INH1 PA4
+				// Reset pulse at INH and IN pin (INH, IN1 and IN2 low)
+				HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, GPIO_PIN_RESET);
+				HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+
+				__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, 0);
+				__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 0);
+
+				__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 0);
+				__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
+
+				// t_reset = 8us for BTM7752Gb
+				HAL_Delay(1);
+				needsReset = 0;
+			}
+		} else if (button1On == 1) {
+			uint8_t pwm = 50;
+			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, pwm);
+			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 0);
+
+			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, pwm);
+			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
+		} else if (button2On == 1) {
+			uint8_t pwm = 50;
+			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, pwm);
+			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, 0);
+
+			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, pwm);
+			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 0);
+		}
+
+		// read encoder counter
+		// uint32_t enc1 = htim4.Instance->CNT;
+		enc1 = __HAL_TIM_GetCounter(&htim3);
+		enc2 = __HAL_TIM_GetCounter(&htim4);
+
+		if (enc1Old != enc1) {
+			sprintf(buffer, "Encoder1 = %d\n", enc1);
+			printUsb(buffer);
+			enc1Old = enc1;
+		}
+		if (enc2Old != enc2) {
+			sprintf(buffer, "Encoder2 = %d\n", enc2);
+			printUsb(buffer);
+			enc2Old = enc2;
 		}
 
 	}
-	/* USER CODE END 3 */
+
 
 }
 
@@ -280,7 +391,8 @@ static void MX_ADC3_Init(void) {
 	hadc3.Init.ScanConvMode = ADC_SCAN_DISABLE;
 	hadc3.Init.ContinuousConvMode = DISABLE;
 	hadc3.Init.DiscontinuousConvMode = DISABLE;
-	hadc3.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+	hadc3.Init.ExternalTrigConvEdge =
+	ADC_EXTERNALTRIGCONVEDGE_NONE;
 	hadc3.Init.ExternalTrigConv = ADC_SOFTWARE_START;
 	hadc3.Init.DataAlign = ADC_DATAALIGN_RIGHT;
 	hadc3.Init.NbrOfConversion = 1;
@@ -328,7 +440,8 @@ static void MX_TIM1_Init(void) {
 	htim1.Init.Period = 0;
 	htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
 	htim1.Init.RepetitionCounter = 0;
-	htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+	htim1.Init.AutoReloadPreload =
+	TIM_AUTORELOAD_PRELOAD_DISABLE;
 	if (HAL_TIM_Base_Init(&htim1) != HAL_OK) {
 		Error_Handler();
 	}
@@ -362,13 +475,14 @@ static void MX_TIM1_Init(void) {
 	sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
 	sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
 	sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
-	if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1)
-			!= HAL_OK) {
+	if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC,
+	TIM_CHANNEL_1) != HAL_OK) {
 		Error_Handler();
 	}
 
 	sConfigOC.OCMode = TIM_OCMODE_TIMING;
-	if (HAL_TIM_OC_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_2) != HAL_OK) {
+	if (HAL_TIM_OC_ConfigChannel(&htim1, &sConfigOC,
+	TIM_CHANNEL_2) != HAL_OK) {
 		Error_Handler();
 	}
 
@@ -380,9 +494,11 @@ static void MX_TIM1_Init(void) {
 	sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
 	sBreakDeadTimeConfig.BreakFilter = 0;
 	sBreakDeadTimeConfig.Break2State = TIM_BREAK2_DISABLE;
-	sBreakDeadTimeConfig.Break2Polarity = TIM_BREAK2POLARITY_HIGH;
+	sBreakDeadTimeConfig.Break2Polarity =
+	TIM_BREAK2POLARITY_HIGH;
 	sBreakDeadTimeConfig.Break2Filter = 0;
-	sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
+	sBreakDeadTimeConfig.AutomaticOutput =
+	TIM_AUTOMATICOUTPUT_DISABLE;
 	if (HAL_TIMEx_ConfigBreakDeadTime(&htim1, &sBreakDeadTimeConfig)
 			!= HAL_OK) {
 		Error_Handler();
@@ -403,7 +519,8 @@ static void MX_TIM3_Init(void) {
 	htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
 	htim3.Init.Period = 0;
 	htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-	htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+	htim3.Init.AutoReloadPreload =
+	TIM_AUTORELOAD_PRELOAD_DISABLE;
 	sConfig.EncoderMode = TIM_ENCODERMODE_TI1;
 	sConfig.IC1Polarity = TIM_ICPOLARITY_RISING;
 	sConfig.IC1Selection = TIM_ICSELECTION_DIRECTTI;
@@ -437,7 +554,8 @@ static void MX_TIM4_Init(void) {
 	htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
 	htim4.Init.Period = 0;
 	htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-	htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+	htim4.Init.AutoReloadPreload =
+	TIM_AUTORELOAD_PRELOAD_DISABLE;
 	sConfig.EncoderMode = TIM_ENCODERMODE_TI1;
 	sConfig.IC1Polarity = TIM_ICPOLARITY_RISING;
 	sConfig.IC1Selection = TIM_ICSELECTION_DIRECTTI;
@@ -473,7 +591,8 @@ static void MX_TIM8_Init(void) {
 	htim8.Init.Period = 0;
 	htim8.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
 	htim8.Init.RepetitionCounter = 0;
-	htim8.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+	htim8.Init.AutoReloadPreload =
+	TIM_AUTORELOAD_PRELOAD_DISABLE;
 	if (HAL_TIM_OC_Init(&htim8) != HAL_OK) {
 		Error_Handler();
 	}
@@ -493,11 +612,13 @@ static void MX_TIM8_Init(void) {
 	sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
 	sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
 	sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
-	if (HAL_TIM_OC_ConfigChannel(&htim8, &sConfigOC, TIM_CHANNEL_1) != HAL_OK) {
+	if (HAL_TIM_OC_ConfigChannel(&htim8, &sConfigOC,
+	TIM_CHANNEL_1) != HAL_OK) {
 		Error_Handler();
 	}
 
-	if (HAL_TIM_OC_ConfigChannel(&htim8, &sConfigOC, TIM_CHANNEL_2) != HAL_OK) {
+	if (HAL_TIM_OC_ConfigChannel(&htim8, &sConfigOC,
+	TIM_CHANNEL_2) != HAL_OK) {
 		Error_Handler();
 	}
 
@@ -509,9 +630,11 @@ static void MX_TIM8_Init(void) {
 	sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
 	sBreakDeadTimeConfig.BreakFilter = 0;
 	sBreakDeadTimeConfig.Break2State = TIM_BREAK2_DISABLE;
-	sBreakDeadTimeConfig.Break2Polarity = TIM_BREAK2POLARITY_HIGH;
+	sBreakDeadTimeConfig.Break2Polarity =
+	TIM_BREAK2POLARITY_HIGH;
 	sBreakDeadTimeConfig.Break2Filter = 0;
-	sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
+	sBreakDeadTimeConfig.AutomaticOutput =
+	TIM_AUTOMATICOUTPUT_DISABLE;
 	if (HAL_TIMEx_ConfigBreakDeadTime(&htim8, &sBreakDeadTimeConfig)
 			!= HAL_OK) {
 		Error_Handler();
@@ -521,7 +644,7 @@ static void MX_TIM8_Init(void) {
 
 }
 
-/** Configure pins as 
+/** Configure pins as
  * Analog
  * Input
  * Output
