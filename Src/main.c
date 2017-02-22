@@ -76,12 +76,12 @@ TIM_HandleTypeDef htim8;
 
 /* USER CODE BEGIN PV */
 
-int button1On = 0;
-int button2On = 0;
-int button2Count = 0;
-int button1Count = 0;
-int UNBOUNCE_CNT = 10;
-int needsReset = 0;
+uint32_t button1On = 0;
+uint32_t button2On = 0;
+uint32_t button2Count = 0;
+uint32_t button1Count = 0;
+uint32_t UNBOUNCE_CNT = 10;
+uint32_t needsReset = 0;
 
 int32_t enc1;
 int32_t enc2;
@@ -126,17 +126,21 @@ uint8_t printUsb(char* buf) {
 	memcpy(UserTxBufferFS, buf, sizeof(char) * Len);
 	USBD_CDC_SetTxBuffer(&hUsbDeviceFS, UserTxBufferFS, Len);
 
-	do {
-		result |= USBD_CDC_TransmitPacket(&hUsbDeviceFS);
-	} while ((result != USBD_OK) && (result != USBD_FAIL));
+	USBD_CDC_TransmitPacket(&hUsbDeviceFS);
 
-	if ((Len % 64 == 0) && (result == USBD_OK)) {
-		while (hcdc->TxState)
-			;
-		USBD_CDC_SetTxBuffer(&hUsbDeviceFS, buf, 0);
-		result |= USBD_CDC_TransmitPacket(&hUsbDeviceFS);
-	}
+	/*
 
+	 do {
+	 result |= USBD_CDC_TransmitPacket(&hUsbDeviceFS);
+	 } while ((result != USBD_OK) && (result != USBD_FAIL));
+
+	 if ((Len % 64 == 0) && (result == USBD_OK)) {
+	 while (hcdc->TxState)
+	 ;
+	 USBD_CDC_SetTxBuffer(&hUsbDeviceFS, buf, 0);
+	 result |= USBD_CDC_TransmitPacket(&hUsbDeviceFS);
+	 }
+	 */
 	return result;
 }
 
@@ -176,8 +180,8 @@ int main(void) {
 	uint32_t g_ADCValue1 = 0;
 	uint32_t g_ADCValue3 = 0;
 
-	uint32_t GPIO_Pin_Button1 = GPIO_PIN_9;   //PA9
-	uint32_t GPIO_Pin_Button2 = GPIO_PIN_10;  //PA10
+	button1On = 0;
+	button2On = 0;
 
 	uint32_t i = 0;
 	HAL_Delay(6000);
@@ -200,20 +204,18 @@ int main(void) {
 		char buffer[255];
 //		sprintf(buffer, "Analog1=%u, Analog3=%u \n\r", g_ADCValue1,
 //				g_ADCValue3);
-		HAL_Delay(1);
+		//HAL_Delay(3);
 		sprintf(buffer, "tick %u\n\r", i);
 		printUsb(buffer);
 
-		button1On = 1;
-		button2On = 1;
-
-		if (HAL_GPIO_ReadPin(GPIOA, GPIO_Pin_Button1) == GPIO_PIN_RESET) {
+		if (HAL_GPIO_ReadPin(BUTTON1_GPIO_Port, BUTTON1_Pin)
+				== GPIO_PIN_RESET) {
 			if (button1Count < UNBOUNCE_CNT) {
-				sprintf(buffer, "unbounce %u\n\r", button1Count);
+				sprintf(buffer, "unbounce button1 %u\n\r", button1Count);
 				printUsb(buffer);
 				button1Count++;
 			} else {
-				printUsb("Button UP is set!\n\r");
+				printUsb("Button 1 is set!\n\r");
 				button1On = 1;
 				button1Count = 0;
 				needsReset = 1;
@@ -223,14 +225,17 @@ int main(void) {
 			button1On = 0;
 		}
 
-		if (HAL_GPIO_ReadPin(GPIOA, GPIO_Pin_Button2) == GPIO_PIN_RESET) {
-			if (button2Count < UNBOUNCE_CNT)
+		if (HAL_GPIO_ReadPin(BUTTON2_GPIO_Port, BUTTON2_Pin)
+				== GPIO_PIN_RESET) {
+			if (button2Count < UNBOUNCE_CNT) {
+				sprintf(buffer, "unbounce button2 %u\n\r", button1Count);
+				printUsb(buffer);
 				button2Count++;
-			else {
+			} else {
 				button2On = 1;
 				button2Count = 0;
 				needsReset = 1;
-				printUsb("Button DOWN is set!\n\r");
+				printUsb("Button 2 is set!\n\r");
 			}
 		} else {
 			button2Count = 0;
@@ -702,8 +707,6 @@ static void MX_GPIO_Init(void) {
 	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
 	GPIO_InitStruct.Pull = GPIO_PULLUP;
 	HAL_GPIO_Init(BUTTON2_GPIO_Port, &GPIO_InitStruct);
-
-
 
 }
 
