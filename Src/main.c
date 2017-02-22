@@ -80,13 +80,13 @@ uint32_t button1On = 0;
 uint32_t button2On = 0;
 uint32_t button2Count = 0;
 uint32_t button1Count = 0;
-uint32_t UNBOUNCE_CNT = 10;
+uint32_t UNBOUNCE_CNT = 3;
 uint32_t needsReset = 0;
 
-int32_t enc1;
-int32_t enc2;
-int32_t enc1Old;
-int32_t enc2Old;
+uint32_t enc1;
+uint32_t enc2;
+uint32_t enc1Old;
+uint32_t enc2Old;
 
 /* Private variables ---------------------------------------------------------*/
 
@@ -194,12 +194,12 @@ int main(void) {
 
 		/* USER CODE BEGIN 3 */
 		i++;
-		if (HAL_ADC_PollForConversion(&hadc1, 1000) == HAL_OK) {
-			g_ADCValue1 = HAL_ADC_GetValue(&hadc1);
-		}
-		if (HAL_ADC_PollForConversion(&hadc3, 1000) == HAL_OK) {
-			g_ADCValue3 = HAL_ADC_GetValue(&hadc3);
-		}
+		//if (HAL_ADC_PollForConversion(&hadc1, 1000) == HAL_OK) {
+		g_ADCValue1 = HAL_ADC_GetValue(&hadc1);
+		//}
+		//if (HAL_ADC_PollForConversion(&hadc3, 1000) == HAL_OK) {
+		g_ADCValue3 = HAL_ADC_GetValue(&hadc3);
+		//}
 
 		char buffer[255];
 //		sprintf(buffer, "Analog1=%u, Analog3=%u \n\r", g_ADCValue1,
@@ -217,7 +217,6 @@ int main(void) {
 			} else {
 				printUsb("Button 1 is set!\n\r");
 				button1On = 1;
-				button1Count = 0;
 				needsReset = 1;
 			}
 		} else {
@@ -228,14 +227,12 @@ int main(void) {
 		if (HAL_GPIO_ReadPin(BUTTON2_GPIO_Port, BUTTON2_Pin)
 				== GPIO_PIN_RESET) {
 			if (button2Count < UNBOUNCE_CNT) {
-				sprintf(buffer, "unbounce button2 %u\n\r", button1Count);
+				sprintf(buffer, "unbounce button2 %u\n\r", button2Count);
 				printUsb(buffer);
 				button2Count++;
 			} else {
 				button2On = 1;
-				button2Count = 0;
 				needsReset = 1;
-				printUsb("Button 2 is set!\n\r");
 			}
 		} else {
 			button2Count = 0;
@@ -256,10 +253,11 @@ int main(void) {
 				__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
 
 				// t_reset = 8us for BTM7752Gb
-				HAL_Delay(5);
+				HAL_Delay(1);
 				needsReset = 0;
 			}
 		} else if (button1On == 1) {
+			printUsb("Button 1 is set!\n\r");
 			uint8_t pwm = 50;
 			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, pwm);
 			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 0);
@@ -267,6 +265,7 @@ int main(void) {
 			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, pwm);
 			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
 		} else if (button2On == 1) {
+			printUsb("Button 2 is set!\n\r");
 			uint8_t pwm = 50;
 			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, pwm);
 			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, 0);
