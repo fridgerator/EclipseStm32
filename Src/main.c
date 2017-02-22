@@ -80,7 +80,7 @@ int button1On = 0;
 int button2On = 0;
 int button2Count = 0;
 int button1Count = 0;
-int UNBOUNCE_CNT = 1000;
+int UNBOUNCE_CNT = 10;
 int needsReset = 0;
 
 int32_t enc1;
@@ -121,9 +121,11 @@ uint8_t printUsb(char* buf) {
 			(USBD_CDC_HandleTypeDef*) hUsbDeviceFS.pClassData;
 	uint8_t result = USBD_OK;
 
-	uint16_t Len = sizeof(buf);
+	uint16_t Len = strlen(buf);
 	/* USER CODE BEGIN 7 */
-	USBD_CDC_SetTxBuffer(&hUsbDeviceFS, buf[0], Len);
+	char UserTxBufferFS[255];
+	memcpy(UserTxBufferFS, buf, sizeof(char) * Len);
+	USBD_CDC_SetTxBuffer(&hUsbDeviceFS, UserTxBufferFS, Len);
 
 	do {
 		result |= USBD_CDC_TransmitPacket(&hUsbDeviceFS);
@@ -178,7 +180,7 @@ int main(void)
 	uint32_t GPIO_Pin_Button1 = GPIO_PIN_9;   //PA9
 	uint32_t GPIO_Pin_Button2 = GPIO_PIN_10;  //PA10
 
-
+	//printUsb("VOGA TableLifter Init finished.");
 
   while (1)
   {
@@ -194,33 +196,33 @@ int main(void)
 		}
 
 		char buffer[255];
-		sprintf(buffer, "Analog1= %u, Analog3=%u\n", g_ADCValue1, g_ADCValue3);
-		printUsb(buffer);
+		sprintf(buffer, "Analog1=%u, Analog3=%u \n\r", g_ADCValue1, g_ADCValue3);
+		//printUsb(buffer);
 
 		button1On = 1;
 		button2On = 1;
 
-		if (HAL_GPIO_ReadPin(GPIOA, GPIO_Pin_Button1) == GPIO_PIN_SET) {
+		if (HAL_GPIO_ReadPin(GPIOA, GPIO_Pin_Button1) == GPIO_PIN_RESET) {
 			if (button1Count < UNBOUNCE_CNT)
 				button1Count++;
 			else {
 				button1On = 1;
 				button1Count = 0;
 				needsReset = 1;
-				//printUsb("Button UP is set!\n");
+				printUsb("Button UP is set!\n\r");
 			}
 		} else {
 			button1Count = 0;
 		}
 
-		if (HAL_GPIO_ReadPin(GPIOA, GPIO_Pin_Button2) == GPIO_PIN_SET) {
+		if (HAL_GPIO_ReadPin(GPIOA, GPIO_Pin_Button2) == GPIO_PIN_RESET) {
 			if (button2Count < UNBOUNCE_CNT)
 				button2Count++;
 			else {
 				button2On = 1;
 				button2Count = 0;
 				needsReset = 1;
-				//printUsb("Button DOWN is set!\n");
+				printUsb("Button DOWN is set!\n\r");
 			}
 		} else {
 			button2Count = 0;
