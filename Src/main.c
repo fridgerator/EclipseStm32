@@ -96,9 +96,9 @@ uint32_t enc2Old;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
+static void MX_GPIO_Init(void);
 void SystemClock_Config(void);
 void Error_Handler(void);
-static void MX_GPIO_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM8_Init(void);
@@ -106,8 +106,9 @@ static void MX_ADC3_Init(void);
 static void MX_TIM4_Init(void);
 static void MX_TIM3_Init(void);
 
-void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
+//void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
+/*
 ADC_HandleTypeDef hadc1;
 ADC_HandleTypeDef hadc3;
 
@@ -115,7 +116,7 @@ TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim4;
 TIM_HandleTypeDef htim8;
-
+*/
 /* USER CODE BEGIN PV */
 
 uint8_t printUsb(char* buf) {
@@ -165,9 +166,9 @@ int main(void) {
 
 	MX_GPIO_Init();
 	MX_ADC1_Init();
+	MX_ADC3_Init();
 	MX_TIM1_Init();
 	MX_TIM8_Init();
-	MX_ADC3_Init();
 	MX_TIM4_Init();
 	MX_TIM3_Init();
 
@@ -192,6 +193,16 @@ int main(void) {
 	char buffer[255];
 	printUsb("VOGA TableLifter Init finished.\n\r");
 
+	HAL_Delay(100);
+	HAL_TIM_Base_Start(&htim1);
+	HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_1);
+	HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_2);
+
+	HAL_Delay(100);
+	HAL_TIM_Base_Start(&htim8);
+	HAL_TIM_PWM_Start(&htim8,TIM_CHANNEL_1);
+	HAL_TIM_PWM_Start(&htim8,TIM_CHANNEL_2);
+
 	while (1) {
 		/* USER CODE END WHILE */
 
@@ -211,8 +222,9 @@ int main(void) {
 		sprintf(buffer, "tick %u\n\r", i);
 		printUsb(buffer);
 
-		if (HAL_GPIO_ReadPin(BUTTON1_GPIO_Port, BUTTON1_Pin)
-				== GPIO_PIN_RESET) {
+		//if (HAL_GPIO_ReadPin(BUTTON1_GPIO_Port, BUTTON1_Pin) == GPIO_PIN_RESET) {
+		HAL_Delay(3);
+		if((BUTTON1_GPIO_Port->IDR & BUTTON1_Pin) == 0u) {
 			if (button1Count < UNBOUNCE_CNT) {
 				sprintf(buffer, "unbounce button1 %u\n\r", button1Count);
 				printUsb(buffer);
@@ -226,9 +238,9 @@ int main(void) {
 			button1Count = 0;
 			button1On = 0;
 		}
-		HAL_Delay(1);
-		if (HAL_GPIO_ReadPin(BUTTON2_GPIO_Port, BUTTON2_Pin)
-				== GPIO_PIN_RESET) {
+		HAL_Delay(3);
+		//if (HAL_GPIO_ReadPin(BUTTON2_GPIO_Port, BUTTON2_Pin)
+		if((BUTTON2_GPIO_Port->IDR & BUTTON2_Pin) == 0u) {
 			if (button2Count < UNBOUNCE_CNT) {
 				sprintf(buffer, "unbounce button2 %u\n\r", button2Count);
 				printUsb(buffer);
@@ -261,15 +273,17 @@ int main(void) {
 			}
 		} else if (button1On == 1) {
 			printUsb("Button 1 is set!\n\r");
-			uint32_t pwm = 50;
-			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, pwm/100 * PWM_RES);
+			uint32_t pwm = 1000;
+			//__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, pwm/100 * PWM_RES);
+			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, pwm);
 			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 0);
 
-			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, pwm/100 * PWM_RES);
+			//__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, pwm/100 * PWM_RES);
+			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, pwm);
 			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
 		} else if (button2On == 1) {
 			printUsb("Button 2 is set!\n\r");
-			uint32_t pwm = 50;
+			uint32_t pwm = 1000;
 			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, pwm/100 * PWM_RES);
 			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, 0);
 
@@ -462,7 +476,7 @@ static void MX_TIM1_Init(void) {
 
 	htim1.Instance = TIM1;
 	htim1.Init.Prescaler = 0;
-	htim1.Init.CounterMode = TIM_COUNTERMODE_CENTERALIGNED3;
+	htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
 	htim1.Init.Period = PWM_RES;
 	htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
 	htim1.Init.RepetitionCounter = 1;
@@ -494,10 +508,10 @@ static void MX_TIM1_Init(void) {
 	}
 
 	sConfigOC.OCMode = TIM_OCMODE_PWM1;
-	sConfigOC.Pulse = 0;
+	sConfigOC.Pulse = 650;
 	sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
 	sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
-	sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+	sConfigOC.OCFastMode = TIM_OCFAST_ENABLE;
 	sConfigOC.OCIdleState = TIM_OCIDLESTATE_SET;
 	sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
 	if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1)
@@ -505,7 +519,6 @@ static void MX_TIM1_Init(void) {
 		Error_Handler();
 	}
 
-	sConfigOC.OCMode = TIM_OCMODE_TIMING;
 	if (HAL_TIM_OC_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_2) != HAL_OK) {
 		Error_Handler();
 	}
@@ -527,7 +540,7 @@ static void MX_TIM1_Init(void) {
 	}
 
 	HAL_TIM_MspPostInit(&htim1);
-	__HAL_TIM_ENABLE(&htim1);
+
 
 }
 
@@ -641,7 +654,7 @@ static void MX_TIM8_Init(void) {
 	}
 
 	sConfigOC.OCMode = TIM_OCMODE_PWM1;
-	sConfigOC.Pulse = 0;
+	sConfigOC.Pulse = 650;
 	sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
 	sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
 	sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
@@ -674,7 +687,7 @@ static void MX_TIM8_Init(void) {
 	}
 
 	HAL_TIM_MspPostInit(&htim8);
-	__HAL_TIM_ENABLE(&htim8);
+
 
 }
 
@@ -722,12 +735,12 @@ static void MX_GPIO_Init(void) {
 	/*Configure GPIO pins : BUTTON1_Pin BUTTON2_Pin */
 	GPIO_InitStruct.Pin = BUTTON1_Pin;
 	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-	GPIO_InitStruct.Pull = GPIO_PULLUP;
+	GPIO_InitStruct.Pull = GPIO_NOPULL;
 	HAL_GPIO_Init(BUTTON1_GPIO_Port, &GPIO_InitStruct);
 
 	GPIO_InitStruct.Pin = BUTTON2_Pin;
 	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-	GPIO_InitStruct.Pull = GPIO_PULLUP;
+	GPIO_InitStruct.Pull = GPIO_NOPULL;
 	HAL_GPIO_Init(BUTTON2_GPIO_Port, &GPIO_InitStruct);
 
 }
