@@ -66,6 +66,9 @@
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
+
+#define PWM_RES 2400
+
 ADC_HandleTypeDef hadc1;
 ADC_HandleTypeDef hadc3;
 
@@ -223,7 +226,7 @@ int main(void) {
 			button1Count = 0;
 			button1On = 0;
 		}
-
+		HAL_Delay(1);
 		if (HAL_GPIO_ReadPin(BUTTON2_GPIO_Port, BUTTON2_Pin)
 				== GPIO_PIN_RESET) {
 			if (button2Count < UNBOUNCE_CNT) {
@@ -259,18 +262,18 @@ int main(void) {
 		} else if (button1On == 1) {
 			printUsb("Button 1 is set!\n\r");
 			uint32_t pwm = 50;
-			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, pwm);
+			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, pwm/100 * PWM_RES);
 			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 0);
 
-			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, pwm);
+			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, pwm/100 * PWM_RES);
 			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
 		} else if (button2On == 1) {
 			printUsb("Button 2 is set!\n\r");
 			uint32_t pwm = 50;
-			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, pwm);
+			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, pwm/100 * PWM_RES);
 			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, 0);
 
-			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, pwm);
+			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, pwm/100 * PWM_RES);
 			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 0);
 		}
 
@@ -450,6 +453,7 @@ static void MX_ADC3_Init(void) {
 
 /* TIM1 init function */
 static void MX_TIM1_Init(void) {
+	//RCC_APB2PeriphClockCmd(RCC_APB2Periph_TIM1, ENABLE);
 
 	TIM_SlaveConfigTypeDef sSlaveConfig;
 	TIM_MasterConfigTypeDef sMasterConfig;
@@ -458,10 +462,10 @@ static void MX_TIM1_Init(void) {
 
 	htim1.Instance = TIM1;
 	htim1.Init.Prescaler = 0;
-	htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-	htim1.Init.Period = 0;
+	htim1.Init.CounterMode = TIM_COUNTERMODE_CENTERALIGNED3;
+	htim1.Init.Period = PWM_RES;
 	htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-	htim1.Init.RepetitionCounter = 0;
+	htim1.Init.RepetitionCounter = 1;
 	htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
 	if (HAL_TIM_Base_Init(&htim1) != HAL_OK) {
 		Error_Handler();
@@ -494,7 +498,7 @@ static void MX_TIM1_Init(void) {
 	sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
 	sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
 	sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-	sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
+	sConfigOC.OCIdleState = TIM_OCIDLESTATE_SET;
 	sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
 	if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1)
 			!= HAL_OK) {
@@ -516,13 +520,14 @@ static void MX_TIM1_Init(void) {
 	sBreakDeadTimeConfig.Break2State = TIM_BREAK2_DISABLE;
 	sBreakDeadTimeConfig.Break2Polarity = TIM_BREAK2POLARITY_HIGH;
 	sBreakDeadTimeConfig.Break2Filter = 0;
-	sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
+	sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_ENABLE;
 	if (HAL_TIMEx_ConfigBreakDeadTime(&htim1, &sBreakDeadTimeConfig)
 			!= HAL_OK) {
 		Error_Handler();
 	}
 
 	HAL_TIM_MspPostInit(&htim1);
+	__HAL_TIM_ENABLE(&htim1);
 
 }
 
@@ -597,18 +602,33 @@ static void MX_TIM4_Init(void) {
 /* TIM8 init function */
 static void MX_TIM8_Init(void) {
 
+	TIM_SlaveConfigTypeDef sSlaveConfig;
 	TIM_MasterConfigTypeDef sMasterConfig;
 	TIM_OC_InitTypeDef sConfigOC;
 	TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig;
 
 	htim8.Instance = TIM8;
 	htim8.Init.Prescaler = 0;
-	htim8.Init.CounterMode = TIM_COUNTERMODE_UP;
-	htim8.Init.Period = 0;
+	htim8.Init.CounterMode = TIM_COUNTERMODE_CENTERALIGNED3;
+	htim8.Init.Period = PWM_RES;
 	htim8.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-	htim8.Init.RepetitionCounter = 0;
+	htim8.Init.RepetitionCounter = 1;
 	htim8.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+	if (HAL_TIM_Base_Init(&htim8) != HAL_OK) {
+		Error_Handler();
+	}
+
+	if (HAL_TIM_PWM_Init(&htim8) != HAL_OK) {
+		Error_Handler();
+	}
+
 	if (HAL_TIM_OC_Init(&htim8) != HAL_OK) {
+		Error_Handler();
+	}
+
+	sSlaveConfig.SlaveMode = TIM_SLAVEMODE_DISABLE;
+	sSlaveConfig.InputTrigger = TIM_TS_ITR0;
+	if (HAL_TIM_SlaveConfigSynchronization(&htim8, &sSlaveConfig) != HAL_OK) {
 		Error_Handler();
 	}
 
@@ -620,17 +640,19 @@ static void MX_TIM8_Init(void) {
 		Error_Handler();
 	}
 
-	sConfigOC.OCMode = TIM_OCMODE_TIMING;
+	sConfigOC.OCMode = TIM_OCMODE_PWM1;
 	sConfigOC.Pulse = 0;
 	sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
 	sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
 	sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-	sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
+	sConfigOC.OCIdleState = TIM_OCIDLESTATE_SET;
 	sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
-	if (HAL_TIM_OC_ConfigChannel(&htim8, &sConfigOC, TIM_CHANNEL_1) != HAL_OK) {
+	if (HAL_TIM_PWM_ConfigChannel(&htim8, &sConfigOC, TIM_CHANNEL_1)
+			!= HAL_OK) {
 		Error_Handler();
 	}
 
+	sConfigOC.OCMode = TIM_OCMODE_TIMING;
 	if (HAL_TIM_OC_ConfigChannel(&htim8, &sConfigOC, TIM_CHANNEL_2) != HAL_OK) {
 		Error_Handler();
 	}
@@ -645,13 +667,14 @@ static void MX_TIM8_Init(void) {
 	sBreakDeadTimeConfig.Break2State = TIM_BREAK2_DISABLE;
 	sBreakDeadTimeConfig.Break2Polarity = TIM_BREAK2POLARITY_HIGH;
 	sBreakDeadTimeConfig.Break2Filter = 0;
-	sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
+	sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_ENABLE;
 	if (HAL_TIMEx_ConfigBreakDeadTime(&htim8, &sBreakDeadTimeConfig)
 			!= HAL_OK) {
 		Error_Handler();
 	}
 
 	HAL_TIM_MspPostInit(&htim8);
+	__HAL_TIM_ENABLE(&htim8);
 
 }
 
