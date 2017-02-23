@@ -106,17 +106,17 @@ static void MX_ADC3_Init(void);
 static void MX_TIM4_Init(void);
 static void MX_TIM3_Init(void);
 
-//void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
+void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
 /*
-ADC_HandleTypeDef hadc1;
-ADC_HandleTypeDef hadc3;
+ ADC_HandleTypeDef hadc1;
+ ADC_HandleTypeDef hadc3;
 
-TIM_HandleTypeDef htim1;
-TIM_HandleTypeDef htim3;
-TIM_HandleTypeDef htim4;
-TIM_HandleTypeDef htim8;
-*/
+ TIM_HandleTypeDef htim1;
+ TIM_HandleTypeDef htim3;
+ TIM_HandleTypeDef htim4;
+ TIM_HandleTypeDef htim8;
+ */
 /* USER CODE BEGIN PV */
 
 uint8_t printUsb(char* buf) {
@@ -165,12 +165,16 @@ int main(void) {
 	/* Initialize all configured peripherals */
 
 	MX_GPIO_Init();
-	MX_ADC1_Init();
-	MX_ADC3_Init();
+
 	MX_TIM1_Init();
 	MX_TIM8_Init();
-	MX_TIM4_Init();
-	MX_TIM3_Init();
+
+	/*
+	 MX_ADC1_Init();
+	 MX_ADC3_Init();
+	 MX_TIM4_Init();
+	 MX_TIM3_Init();
+	 */
 
 	MX_USB_DEVICE_Init();
 
@@ -188,20 +192,10 @@ int main(void) {
 	button2On = 0;
 
 	uint32_t i = 0;
-	HAL_Delay(6000);
+	HAL_Delay(600);
 
 	char buffer[255];
 	printUsb("VOGA TableLifter Init finished.\n\r");
-
-	HAL_Delay(100);
-	HAL_TIM_Base_Start(&htim1);
-	HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_1);
-	HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_2);
-
-	HAL_Delay(100);
-	HAL_TIM_Base_Start(&htim8);
-	HAL_TIM_PWM_Start(&htim8,TIM_CHANNEL_1);
-	HAL_TIM_PWM_Start(&htim8,TIM_CHANNEL_2);
 
 	while (1) {
 		/* USER CODE END WHILE */
@@ -224,7 +218,7 @@ int main(void) {
 
 		//if (HAL_GPIO_ReadPin(BUTTON1_GPIO_Port, BUTTON1_Pin) == GPIO_PIN_RESET) {
 		HAL_Delay(3);
-		if((BUTTON1_GPIO_Port->IDR & BUTTON1_Pin) == 0u) {
+		if ((BUTTON1_GPIO_Port->IDR & BUTTON1_Pin) == 0u) {
 			if (button1Count < UNBOUNCE_CNT) {
 				sprintf(buffer, "unbounce button1 %u\n\r", button1Count);
 				printUsb(buffer);
@@ -240,7 +234,7 @@ int main(void) {
 		}
 		HAL_Delay(3);
 		//if (HAL_GPIO_ReadPin(BUTTON2_GPIO_Port, BUTTON2_Pin)
-		if((BUTTON2_GPIO_Port->IDR & BUTTON2_Pin) == 0u) {
+		if ((BUTTON2_GPIO_Port->IDR & BUTTON2_Pin) == 0u) {
 			if (button2Count < UNBOUNCE_CNT) {
 				sprintf(buffer, "unbounce button2 %u\n\r", button2Count);
 				printUsb(buffer);
@@ -402,6 +396,9 @@ static void MX_ADC1_Init(void) {
 	if (HAL_ADCEx_MultiModeConfigChannel(&hadc1, &multimode) != HAL_OK) {
 		Error_Handler();
 	}
+	HAL_TIM_Base_Start(&htim1);
+	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
 
 	/**Configure Regular Channel
 	 */
@@ -541,6 +538,9 @@ static void MX_TIM1_Init(void) {
 
 	HAL_TIM_MspPostInit(&htim1);
 
+	HAL_TIM_Base_Start(&htim1);
+	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
 
 }
 
@@ -657,7 +657,7 @@ static void MX_TIM8_Init(void) {
 	sConfigOC.Pulse = 650;
 	sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
 	sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
-	sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+	sConfigOC.OCFastMode = TIM_OCFAST_ENABLE;
 	sConfigOC.OCIdleState = TIM_OCIDLESTATE_SET;
 	sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
 	if (HAL_TIM_PWM_ConfigChannel(&htim8, &sConfigOC, TIM_CHANNEL_1)
@@ -688,6 +688,9 @@ static void MX_TIM8_Init(void) {
 
 	HAL_TIM_MspPostInit(&htim8);
 
+	HAL_TIM_Base_Start(&htim8);
+	HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_1);
+	HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
 
 }
 
