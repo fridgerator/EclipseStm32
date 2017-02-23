@@ -251,14 +251,13 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef* htim) {
 	GPIO_InitTypeDef GPIO_InitStruct;
 	if (htim->Instance == TIM1) {
 		/* USER CODE BEGIN TIM1_MspPostInit 0 */
-
+		__TIM1_CLK_ENABLE()
+		;
 		/* USER CODE END TIM1_MspPostInit 0 */
 		/**TIM1 GPIO Configuration
 		 PC13     ------> TIM1_CH1N
 		 PB14     ------> TIM1_CH2N
 		 */
-		__TIM1_CLK_ENABLE()
-		;
 
 		GPIO_InitStruct.Pin = PWM1_Pin;
 		GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
@@ -279,7 +278,8 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef* htim) {
 		/* USER CODE END TIM1_MspPostInit 1 */
 	} else if (htim->Instance == TIM8) {
 		/* USER CODE BEGIN TIM8_MspPostInit 0 */
-		__TIM8_CLK_ENABLE();
+		__TIM8_CLK_ENABLE()
+		;
 
 		/* USER CODE END TIM8_MspPostInit 0 */
 
