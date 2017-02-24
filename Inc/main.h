@@ -53,8 +53,12 @@
 
 #define PWM1_Pin GPIO_PIN_13
 #define PWM1_GPIO_Port GPIOC
-#define INH1_Pin GPIO_PIN_4
-#define INH1_GPIO_Port GPIOA
+#define INH1_Pin GPIO_PIN_14
+#define INH1_GPIO_Port GPIOC
+#define ENC4_Pin GPIO_PIN_4
+#define ENC4_GPIO_Port GPIOA
+#define ENC3_Pin GPIO_PIN_6
+#define ENC3_GPIO_Port GPIOA
 #define PWM3_Pin GPIO_PIN_7
 #define PWM3_GPIO_Port GPIOA
 #define PWM4_Pin GPIO_PIN_0
@@ -63,14 +67,10 @@
 #define INH2_GPIO_Port GPIOB
 #define PWM2_Pin GPIO_PIN_14
 #define PWM2_GPIO_Port GPIOB
-#define BUTTON1_Pin GPIO_PIN_9
-#define BUTTON1_GPIO_Port GPIOA
-#define BUTTON2_Pin GPIO_PIN_10
-#define BUTTON2_GPIO_Port GPIOA
-#define ENC3_Pin GPIO_PIN_4
-#define ENC3_GPIO_Port GPIOB
-#define ENC4_Pin GPIO_PIN_5
-#define ENC4_GPIO_Port GPIOB
+#define Button1_Pin GPIO_PIN_9
+#define Button1_GPIO_Port GPIOA
+#define Button1A10_Pin GPIO_PIN_10
+#define Button1A10_GPIO_Port GPIOA
 #define ENC2_Pin GPIO_PIN_6
 #define ENC2_GPIO_Port GPIOB
 #define ENC1_Pin GPIO_PIN_7
