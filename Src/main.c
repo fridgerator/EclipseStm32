@@ -104,26 +104,9 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 /* USER CODE BEGIN 0 */
 
 
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-{
-	//for (int i = 0; i < 50; i++){}
-
-	//HAL_Delay(2);
-	if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9) == GPIO_PIN_RESET)
-		button1On = 1;
-	else
-		button1On = 0;
-
-	//HAL_Delay(2);
-	if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_10) == GPIO_PIN_RESET)
-		button2On = 1;
-	else
-		button2On = 0;
-}
-
 uint8_t printUsb(char* buf) {
 	uint8_t result = USBD_OK;
-	return result;
+	//return result;
 
 	USBD_CDC_HandleTypeDef *hcdc =
 			(USBD_CDC_HandleTypeDef*) hUsbDeviceFS.pClassData;
@@ -219,8 +202,8 @@ int main(void)
 //		sprintf(buffer, "Analog1=%u, Analog3=%u \n\r", g_ADCValue1,
 //				g_ADCValue3);
 		//HAL_Delay(3);
-		sprintf(buffer, "tick %u\n\r", i);
-		printUsb(buffer);
+		//sprintf(buffer, "tick %u\n\r", i);
+		//printUsb(buffer);
 
 		/*
 		HAL_Delay(3);
@@ -259,6 +242,8 @@ int main(void)
 		if (button1On == 0 && button2On == 0) {
 			//reset stepper drivers BTM7752G
 			if (needsReset == 1) {
+				sprintf(buffer, "Reset %u\n\r", i);
+				printUsb(buffer);
 				//INH2 FB11, INH1 PA4
 				// Reset pulse at INH and IN pin (INH, IN1 and IN2 low)
 				HAL_GPIO_WritePin(INH1_GPIO_Port, INH1_Pin, GPIO_PIN_SET);
@@ -274,7 +259,9 @@ int main(void)
 				needsReset = 0;
 			}
 		} else if (button1On == 1) {
-			printUsb("Button 1 is set!\n\r");
+			sprintf(buffer, "%u Button 1 is set!\n\r", i);
+			printUsb(buffer);
+
 			pwm++;
 			if(pwm>2300)
 				pwm=2300;
@@ -287,7 +274,9 @@ int main(void)
 
 			HAL_Delay(1);
 		} else if (button2On == 1) {
-			printUsb("Button 2 is set!\n\r");
+			sprintf(buffer, "%u Button 2 is set!\n\r", i);
+			printUsb(buffer);
+
 			pwm--;
 			if(pwm<0)
 				pwm=0;
@@ -763,7 +752,7 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pins : Button1_Pin Button1A10_Pin */
   GPIO_InitStruct.Pin = Button1_Pin|Button1A10_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
