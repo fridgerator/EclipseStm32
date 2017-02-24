@@ -272,7 +272,7 @@ int main(void)
 			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, pwm);
 			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
 
-			HAL_Delay(1);
+			//HAL_Delay(1);
 		} else if (button2On == 1) {
 			sprintf(buffer, "%u Button 2 is set!\n\r", i);
 			printUsb(buffer);

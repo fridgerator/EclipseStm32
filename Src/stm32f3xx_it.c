@@ -38,23 +38,31 @@
 /* USER CODE BEGIN 0 */
 extern uint32_t button1On;
 extern uint32_t button2On;
+extern uint32_t needsReset;
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	//for (int i = 0; i < 50; i++){}
 
-	//HAL_Delay(2);
 	if (GPIO_Pin == GPIO_PIN_9)
+	{
 		if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9) == GPIO_PIN_RESET)
 			button1On = 1;
 		else
+		{
 			button1On = 0;
-
-	//HAL_Delay(2);
-	if (GPIO_Pin == GPIO_PIN_10)
+			needsReset = 1;
+		}
+	}
+	else if (GPIO_Pin == GPIO_PIN_10)
+	{
 		if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_10) == GPIO_PIN_RESET)
 			button2On = 1;
 		else
+		{
 			button2On = 0;
+			needsReset = 1;
+		}
+	}
 }
 
 /* USER CODE END 0 */
