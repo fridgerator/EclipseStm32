@@ -69,7 +69,7 @@
 #define PWM2_GPIO_Port GPIOB
 #define Button1_Pin GPIO_PIN_9
 #define Button1_GPIO_Port GPIOA
-#define Button1A10_Pin GPIO_PIN_10
+#define Button2_Pin GPIO_PIN_10
 #define Button1A10_GPIO_Port GPIOA
 #define ENC2_Pin GPIO_PIN_6
 #define ENC2_GPIO_Port GPIOB
