@@ -44,11 +44,10 @@
 #include "main.h"
 #include "stm32f3xx_hal.h"
 #include "usb_device.h"
-#include <usbd_cdc.h>
-#include <usbd_def.h>
 
 /* USER CODE BEGIN Includes */
-
+#include <usbd_cdc.h>
+#include <usbd_def.h>
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
@@ -67,7 +66,7 @@ uint32_t button2On = 0;
 uint32_t button2Count = 0;
 uint32_t button1Count = 0;
 uint32_t UNBOUNCE_CNT = 3;
-uint32_t needsReset = 0;
+uint32_t alreadyResetted = 0;
 
 uint32_t enc1;
 uint32_t enc2;
@@ -111,7 +110,7 @@ uint8_t printUsb(char* buf) {
 
 	uint16_t Len = strlen(buf);
 	/* USER CODE BEGIN 7 */
-	char UserTxBufferFS[255];
+	uint8_t UserTxBufferFS[255];
 	memcpy(UserTxBufferFS, buf, sizeof(char) * Len);
 	USBD_CDC_SetTxBuffer(&hUsbDeviceFS, UserTxBufferFS, Len);
 
@@ -177,7 +176,6 @@ int main(void) {
 	HAL_GPIO_WritePin(INH2_GPIO_Port, INH2_Pin, GPIO_PIN_SET);
 
 	HAL_Delay(100);
-
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
@@ -211,7 +209,6 @@ int main(void) {
 		//sprintf(buffer, "tick %u\n\r", i);
 		//printUsb(buffer);
 
-		/*
 		 HAL_Delay(3);
 		 if (HAL_GPIO_ReadPin(Button1_GPIO_Port, Button1_Pin)
 		 == GPIO_PIN_RESET) {
@@ -228,7 +225,6 @@ int main(void) {
 		 button1Count = 0;
 		 button1On = 0;
 		 }
-
 		 HAL_Delay(3);
 		 if (HAL_GPIO_ReadPin(Button2_GPIO_Port, Button2_Pin)
 		 == GPIO_PIN_RESET) {
@@ -247,15 +243,16 @@ int main(void) {
 		 */
 		if (button1On == 0 && button2On == 0) {
 			//reset stepper drivers BTM7752G
-			if (needsReset == 1) {
-				sprintf(buffer, "Reset %u\n\r", i);
+			if (alreadyResetted != 1) {
 				//printUsb(buffer);
 				//INH2 FB11, INH1 PA4
 				// Reset pulse at INH and IN pin (INH, IN1 and IN2 low)
 				HAL_GPIO_WritePin(INH1_GPIO_Port, INH1_Pin, GPIO_PIN_RESET);
 				HAL_GPIO_WritePin(INH2_GPIO_Port, INH2_Pin, GPIO_PIN_RESET);
+				HAL_Delay(2);
 				__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, 0);
 				__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 0);
+				HAL_Delay(2);
 				__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 0);
 				__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
 
@@ -266,11 +263,13 @@ int main(void) {
 
 				// t_reset = 8us for BTM7752Gb
 				pwm = 0;
-				needsReset = 0;
+				sprintf(buffer, "%u Resetted.\n\r", i);
+				printUsb(buffer);
 			}
 		}
 
 		if (button1On == 1) {
+			alreadyResetted = 0;
 			sprintf(buffer, "%u Button 1 is set!\n\r", i);
 			//printUsb(buffer);
 
@@ -286,9 +285,10 @@ int main(void) {
 			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 2400);
 			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, pwm);
 
-			HAL_Delay(1);
+			//HAL_Delay(1);
 			needsReset = 1;
 		} else if (button2On == 1) {
+			alreadyResetted = 0;
 			sprintf(buffer, "%u Button 2 is set!\n\r", i);
 			//printUsb(buffer);
 
