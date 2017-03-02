@@ -67,29 +67,6 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	}
 }
 
-void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {/*
- if (HAL_IS_BIT_SET(HAL_ADC_GetState(&hadc1), HAL_ADC_STATE_REG_EOC)) {
- g_ADCValue1 = HAL_ADC_GetValue(&hadc1);
- }
- if (HAL_IS_BIT_SET(HAL_ADC_GetState(&hadc3), HAL_ADC_STATE_REG_EOC)) {
- g_ADCValue3 = HAL_ADC_GetValue(&hadc3);
- }
- */
-    //SET_BIT(hadc->Instance->CR, ADC_CR_ADSTART);
-
-    /*
-	if (HAL_ADCEx_MultiModeStart_DMA(&hadc1, (uint32_t *) aADCxConvertedValues1,
-	ADCCONVERTEDVALUES_BUFFER_SIZE) != HAL_OK) {
-		Error_Handler();
-	}
-
-	if (HAL_ADCEx_MultiModeStart_DMA(&hadc3, (uint32_t *) aADCxConvertedValues3,
-	ADCCONVERTEDVALUES_BUFFER_SIZE) != HAL_OK) {
-		Error_Handler();
-	}
-	*/
-
-}
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
