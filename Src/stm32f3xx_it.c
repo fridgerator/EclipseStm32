@@ -39,15 +39,22 @@
 extern uint32_t button1On;
 extern uint32_t button2On;
 
+extern uint32_t g_ADCValue1;
+extern uint32_t g_ADCValue3;
+extern ADC_HandleTypeDef hadc1;
+extern ADC_HandleTypeDef hadc3;
+
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	if (GPIO_Pin == Button1_Pin) {
-		if (HAL_GPIO_ReadPin(Button1_GPIO_Port, Button1_Pin) == GPIO_PIN_RESET) {
+		if (HAL_GPIO_ReadPin(Button1_GPIO_Port, Button1_Pin)
+				== GPIO_PIN_RESET) {
 			button1On = 1;
 		} else {
 			button1On = 0;
 		}
 	} else if (GPIO_Pin == Button2_Pin) {
-		if (HAL_GPIO_ReadPin(Button2_GPIO_Port, Button2_Pin) == GPIO_PIN_RESET) {
+		if (HAL_GPIO_ReadPin(Button2_GPIO_Port, Button2_Pin)
+				== GPIO_PIN_RESET) {
 			button2On = 1;
 		} else {
 			button2On = 0;
@@ -55,10 +62,20 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	}
 }
 
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
+	if (HAL_IS_BIT_SET(HAL_ADC_GetState(&hadc1), HAL_ADC_STATE_REG_EOC)) {
+		g_ADCValue1 = HAL_ADC_GetValue(&hadc1);
+	}
+	if (HAL_IS_BIT_SET(HAL_ADC_GetState(&hadc3), HAL_ADC_STATE_REG_EOC)) {
+		g_ADCValue3 = HAL_ADC_GetValue(&hadc3);
+	}
+}
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
 extern PCD_HandleTypeDef hpcd_USB_FS;
+extern DMA_HandleTypeDef hdma_adc1;
+extern DMA_HandleTypeDef hdma_adc3;
 
 /******************************************************************************/
 /*            Cortex-M4 Processor Interruption and Exception Handlers         */ 
@@ -203,6 +220,20 @@ void SysTick_Handler(void)
 /******************************************************************************/
 
 /**
+* @brief This function handles DMA1 channel1 global interrupt.
+*/
+void DMA1_Channel1_IRQHandler(void)
+{
+  /* USER CODE BEGIN DMA1_Channel1_IRQn 0 */
+
+  /* USER CODE END DMA1_Channel1_IRQn 0 */
+  HAL_DMA_IRQHandler(&hdma_adc1);
+  /* USER CODE BEGIN DMA1_Channel1_IRQn 1 */
+
+  /* USER CODE END DMA1_Channel1_IRQn 1 */
+}
+
+/**
 * @brief This function handles USB low priority or CAN_RX0 interrupts.
 */
 void USB_LP_CAN_RX0_IRQHandler(void)
@@ -241,6 +272,20 @@ void EXTI15_10_IRQHandler(void)
   /* USER CODE BEGIN EXTI15_10_IRQn 1 */
 
   /* USER CODE END EXTI15_10_IRQn 1 */
+}
+
+/**
+* @brief This function handles DMA2 channel5 global interrupt.
+*/
+void DMA2_Channel5_IRQHandler(void)
+{
+  /* USER CODE BEGIN DMA2_Channel5_IRQn 0 */
+
+  /* USER CODE END DMA2_Channel5_IRQn 0 */
+  HAL_DMA_IRQHandler(&hdma_adc3);
+  /* USER CODE BEGIN DMA2_Channel5_IRQn 1 */
+
+  /* USER CODE END DMA2_Channel5_IRQn 1 */
 }
 
 /* USER CODE BEGIN 1 */
