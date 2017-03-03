@@ -107,17 +107,17 @@ int32_t pwm = 2400;
 char buffer[255] = { "" };
 char prev_buffer[255] = { "" };
 
-static union {                // This Data structure lets
+static union { // This Data structure lets
 	uint8_t asBytes[24]; // us take the byte array
-	float asFloat[6];    // sent from processing and
-}                      // easily convert it to a
-floatUnion;                   // float array
+	float asFloat[6]; // sent from processing and
+} // easily convert it to a
+floatUnion; // float array
 
-static union {                // This Data structure lets
+static union { // This Data structure lets
 	uint8_t asBytes[2]; // us take the byte array
-	uint16_t asInt[1];    // sent from processing and
-}                      // easily convert it to a
-byteUnion;                   // float array
+	uint16_t asInt[1]; // sent from processing and
+} // easily convert it to a
+byteUnion; // float array
 
 uint8_t received_data[100];
 uint32_t received_data_size = 0;
@@ -125,20 +125,18 @@ uint32_t receive_total;
 
 bool emergencyStop = false;
 bool prvic = false;
-bool slowStopDone=false;
+bool slowStopDone = false;
 uint8_t previousButton = 0;
 
-uint16_t g_ADCValue_threshold = 10000;
+uint16_t g_ADCValue_threshold = 6000;
 //float aggKp = 110, aggKi = 60, aggKd = 1;
 //float aggKp = 70, aggKi = 3, aggKd = 0.2;
-float aggKp = 70, aggKi = 10, aggKd = 0.5;
+float aggKp = 100, aggKi = 30, aggKd = 1.5;
 
 float Setpoint1 = 32768, Input1 = 32768, Output1, prevOutput1;
 float Setpoint2 = 32768, Input2 = 32768, Output2, prevOutput2;
-PID myPID1 = PID(&Input1, &Output1, &Setpoint1, aggKp, aggKi, aggKd,
-		DIRECT);
-PID myPID2 = PID(&Input2, &Output2, &Setpoint2, aggKp, aggKi, aggKd,
-		DIRECT);
+PID myPID1 = PID(&Input1, &Output1, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
+PID myPID2 = PID(&Input2, &Output2, &Setpoint2, aggKp, aggKi, aggKd, DIRECT);
 char *ftoa(char *a, double f, int precision);
 void buildAndSendBuffer();
 void SerialReceive();
@@ -170,12 +168,10 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef* htim);
 
 // 310 mV padca na 1kOhm uporu
 // I=U/R -> I = 0.310 V/1000 Ohm = 0.000310 A = 0.3 mA
-
 uint8_t printUsb(const char* buf) {
 	uint16_t Len = strlen(buf);
 
-	if (hUsbDeviceFS.dev_address
-			!= 0&& hUsbDeviceFS.dev_state == USBD_STATE_CONFIGURED) {
+	if (hUsbDeviceFS.dev_address != 0 && hUsbDeviceFS.dev_state == USBD_STATE_CONFIGURED) {
 		uint8_t UserTxBufferFS[255];
 		memcpy(UserTxBufferFS, buf, sizeof(char) * Len);
 		USBD_CDC_SetTxBuffer(&hUsbDeviceFS, UserTxBufferFS, Len);
@@ -184,6 +180,40 @@ uint8_t printUsb(const char* buf) {
 	return USBD_FAIL;
 }
 /* USER CODE END 0 */
+
+void resetPwm(uint32_t i) {
+//printUsb(buffer);
+//INH2 FB11, INH1 PA4
+// Reset pulse at INH and IN pin (INH, IN1 and IN2 low)
+	HAL_GPIO_WritePin(
+	INH1_GPIO_Port,
+	INH1_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(
+	INH2_GPIO_Port,
+	INH2_Pin, GPIO_PIN_RESET);
+	for (int j = 0; j < 10; j++) {
+	}
+	__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, 0);
+	__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 0);
+	__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 0);
+	__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
+	for (int j = 0; j < 10; j++) {
+	}
+	HAL_GPIO_WritePin(
+	INH1_GPIO_Port,
+	INH1_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(
+	INH2_GPIO_Port,
+	INH2_Pin, GPIO_PIN_SET);
+
+// t_reset = 8us for BTM7752Gb
+	pwm = 2400;
+	sprintf(buffer, "%lu Resetted.\n\r", i);
+	printUsb(buffer);
+	alreadyResetted = 1;
+	for (int j = 0; j < 10; j++) {
+	}
+}
 
 int main(void) {
 
@@ -229,18 +259,22 @@ int main(void) {
 	__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 0);
 
 	myPID1.SetOutputLimits(-2400, 2400);
-	myPID1.SetMode(AUTOMATIC);
+	myPID1.SetMode(
+	AUTOMATIC);
 	myPID2.SetOutputLimits(-2400, 2400);
-	myPID2.SetMode(AUTOMATIC);
+	myPID2.SetMode(
+	AUTOMATIC);
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
 
-	uint32_t i = 0;
+	int32_t i = 0;
 
-	HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
-	HAL_ADCEx_Calibration_Start(&hadc3, ADC_SINGLE_ENDED);
+	HAL_ADCEx_Calibration_Start(&hadc1,
+	ADC_SINGLE_ENDED);
+	HAL_ADCEx_Calibration_Start(&hadc3,
+	ADC_SINGLE_ENDED);
 
 	/*
 	 HAL_ADC_Start_IT(&hadc1);
@@ -265,18 +299,16 @@ int main(void) {
 
 //printUsb("VOGA TableLifter Init finished.\n\r");
 
-	if (HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL) != HAL_OK) {
+	if (HAL_TIM_Encoder_Start(&htim3,
+	TIM_CHANNEL_ALL) != HAL_OK) {
 		printUsb("Error starting encoder 3");
 	}
-	if (HAL_TIM_Encoder_Start(&htim4, TIM_CHANNEL_ALL) != HAL_OK) {
+	if (HAL_TIM_Encoder_Start(&htim4,
+	TIM_CHANNEL_ALL) != HAL_OK) {
 		printUsb("Error starting encoder 4");
 	}
 
-	for(int i=0;i<3*1000;i++)
-	{
-
-	}
-
+	HAL_Delay(100);
 
 	while (1) {
 		/* USER CODE END WHILE */
@@ -294,16 +326,18 @@ int main(void) {
 		}
 
 		g_ADCValue = MAX(g_ADCValue1, g_ADCValue3);
-		if (g_ADCValue > g_ADCValue_threshold) {
-			if (!emergencyStop) {
-				//calculate new position
-				if (Setpoint1 > Input1) {
-					Setpoint1 = Input1 - 100;
-					Setpoint2 = Input1 - 100;
-				} else {
-					Setpoint1 = Input1 + 100;
-					Setpoint2 = Input1 + 100;
-				}
+		if (g_ADCValue > g_ADCValue_threshold && !emergencyStop) {
+			slowStop();
+			HAL_Delay(200);
+			resetPwm(i);
+			HAL_Delay(200);
+			//calculate new position
+			if (Setpoint1 > Input1) {
+				Setpoint1 = Input1 - 30;
+				Setpoint2 = Input1 - 30;
+			} else {
+				Setpoint1 = Input1 + 30;
+				Setpoint2 = Input1 + 30;
 			}
 			emergencyStop = true;
 		}
@@ -315,34 +349,7 @@ int main(void) {
 			//reset stepper drivers BTM7752G
 			if (abs(Setpoint1 - Input1) < 3 && abs(Setpoint2 - Input2) < 3) {
 				if (alreadyResetted != 1) {
-					//printUsb(buffer);
-					//INH2 FB11, INH1 PA4
-					// Reset pulse at INH and IN pin (INH, IN1 and IN2 low)
-					HAL_GPIO_WritePin(INH1_GPIO_Port, INH1_Pin, GPIO_PIN_RESET);
-					HAL_GPIO_WritePin(INH2_GPIO_Port, INH2_Pin, GPIO_PIN_RESET);
-					for(int j=0;j<10;j++)
-					{
-					}
-					__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, 0);
-					__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 0);
-					__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 0);
-					__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
-					for(int j=0;j<10;j++)
-					{
-					}
-					HAL_GPIO_WritePin(INH1_GPIO_Port, INH1_Pin, GPIO_PIN_SET);
-					HAL_GPIO_WritePin(INH2_GPIO_Port, INH2_Pin, GPIO_PIN_SET);
-
-					// t_reset = 8us for BTM7752Gb
-					pwm = 2400;
-					sprintf(buffer, "%lu Resetted.\n\r", i);
-					printUsb(buffer);
-					alreadyResetted = 1;
-					for(int j=0;j<10;j++)
-					{
-					}
-
-
+					resetPwm(i);
 				}
 				emergencyStop = false;
 				slowStopDone = true;
@@ -353,55 +360,45 @@ int main(void) {
 		Input1 = htim3.Instance->CNT;
 		Input2 = htim4.Instance->CNT;
 
-		if (button2On == 1) {
+		if (button2On == 1 && !emergencyStop) {
 			alreadyResetted = 0;
 			if (prvic == false && previousButton != 2)
 				prvic = true;
-			if (Setpoint1 < Input1 + 70 && !emergencyStop) {
+			if (Setpoint1 < Input1 + 70) {
 				Setpoint1 = Setpoint1 + 0.17;
 			}
 			previousButton = 2;
 		}
 
-		if (button1On == 1) {
+		if (button1On == 1 && !emergencyStop) {
 			alreadyResetted = 0;
 			if (prvic == false && previousButton != 1)
 				prvic = true;
-			if (Setpoint1 > Input1 - 70 && !emergencyStop) {
+			if (Setpoint1 > Input1 - 70) {
 				Setpoint1 = Setpoint1 - 0.17;
 			}
 			previousButton = 1;
 		}
 
-		if (emergencyStop && !slowStopDone) {
-			slowStop();
-		} else {
-			myPID1.Compute();
-			myPID2.Compute();
-		}
+		Setpoint2 = Setpoint1;
+		myPID1.Compute();
+		myPID2.Compute();
 
-		/*
 		if (i % 150 == 0) {
 			SerialReceive();
 			buildAndSendBuffer();
 		}
-		*/
 
 		if (Output1 < 0.0) {
 			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 2400);
 			if (prvic) {
-				for(int j=0;j<10;j++)
-				{
-				}
+				HAL_Delay(5);
 			}
 			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, 2400 - abs(Output1));
 		} else if (Output1 > 0.0) {
 			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, 2400);
 			if (prvic) {
-				for(int j=0;j<10;j++)
-				{
-				}
-
+				HAL_Delay(5);
 			}
 			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 2400 - abs(Output1));
 		}
@@ -410,24 +407,18 @@ int main(void) {
 		if (Output2 < 0.0) {
 			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 2400);
 			if (prvic) {
-				for(int j=0;j<10;j++)
-				{
-				}
-
+				HAL_Delay(5);
 			}
 			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 2400 - abs(Output2));
 		} else if (Output2 > 0.0) {
 			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 2400);
 			if (prvic) {
-				for(int j=0;j<10;j++)
-				{
-				}
-
+				HAL_Delay(5);
 			}
 			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 2400 - abs(Output2));
 		}
 
-		if(prvic)
+		if (prvic)
 			prvic = false;
 		prevOutput2 = Output2;
 
@@ -457,6 +448,7 @@ void slowStop() {
 			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 2400 - abs(Output2));
 			Output2--;
 		}
+		HAL_Delay(2);
 	}
 	slowStopDone = true;
 }
@@ -465,8 +457,7 @@ void buildAndSendBuffer() {
 	char f1[10];
 	char f2[10];
 	char f3[10];
-	sprintf(buffer, "sp=%s, input=%s, output=%s\n\r", ftoa(f1, Setpoint1, 3),
-			ftoa(f2, Input1, 3), ftoa(f3, Output1, 3));
+	sprintf(buffer, "sp=%s, input=%s, output=%s\n\r", ftoa(f1, Setpoint1, 3), ftoa(f2, Input1, 3), ftoa(f3, Output1, 3));
 
 	strcpy(buffer, "PID ");
 	strcat(buffer, ftoa(f1, Setpoint2, 3));
@@ -525,8 +516,7 @@ void buildAndSendBuffer() {
 //  18-21: float I_Param
 //  22-245: float D_Param
 void SerialReceive() {
-	if (hUsbDeviceFS.dev_address
-			!= 0&& hUsbDeviceFS.dev_state == USBD_STATE_CONFIGURED) {
+	if (hUsbDeviceFS.dev_address != 0 && hUsbDeviceFS.dev_state == USBD_STATE_CONFIGURED) {
 		uint8_t index = 0;
 		uint8_t Auto_Man = -1;
 		uint8_t Direct_Reverse = -1;
@@ -543,41 +533,40 @@ void SerialReceive() {
 				index++;
 			}
 
-			if ((Auto_Man == 0 || Auto_Man == 1)
-					&& (Direct_Reverse == 0 || Direct_Reverse == 1)) {
+			if ((Auto_Man == 0 || Auto_Man == 1) && (Direct_Reverse == 0 || Direct_Reverse == 1)) {
 				Setpoint1 = double(floatUnion.asFloat[0]);
 				Setpoint2 = double(floatUnion.asFloat[0]);
 
 				//Input=double(foo.asFloat[1]);       // * the user has the ability to send the
 				//   value of "Input"  in most cases (as
 				//   in this one) this is not needed.
-				if (Auto_Man == 0)      // * only change the output if we are in
-						{              //   manual mode.  otherwise we'll get an
+				if (Auto_Man == 0) // * only change the output if we are in
+						{ //   manual mode.  otherwise we'll get an
 					Output1 = double(floatUnion.asFloat[2]); //   output blip, then the controller will
 					Output2 = double(floatUnion.asFloat[2]); //   output blip, then the controller will
-				}                                     //   overwrite.
+				} //   overwrite.
 				g_ADCValue_threshold = byteUnion.asInt[0];
-				double p, i, d;      // * read in and set the controller tunings
-				p = double(floatUnion.asFloat[3]);           //
-				i = double(floatUnion.asFloat[4]);           //
-				d = double(floatUnion.asFloat[5]);           //
-				myPID1.SetTunings(p, i, d);            //
-				myPID2.SetTunings(p, i, d);            //
+				double p, i, d; // * read in and set the controller tunings
+				p = double(floatUnion.asFloat[3]); //
+				i = double(floatUnion.asFloat[4]); //
+				d = double(floatUnion.asFloat[5]); //
+				myPID1.SetTunings(p, i, d); //
+				myPID2.SetTunings(p, i, d); //
 
 				if (Auto_Man == 0) {
-					myPID1.SetMode(MANUAL);        // * set the controller mode
-					myPID2.SetMode(MANUAL);        // * set the controller mode
+					myPID1.SetMode(MANUAL); // * set the controller mode
+					myPID2.SetMode(MANUAL); // * set the controller mode
 				} else {
-					myPID1.SetMode(AUTOMATIC);             //
-					myPID2.SetMode(AUTOMATIC);             //
+					myPID1.SetMode(AUTOMATIC); //
+					myPID2.SetMode(AUTOMATIC); //
 				}
 
 				if (Direct_Reverse == 0) {
-					myPID1.SetControllerDirection(DIRECT); // * set the controller Direction
-					myPID2.SetControllerDirection(DIRECT); // * set the controller Direction
+					myPID1.SetControllerDirection( DIRECT); // * set the controller Direction
+					myPID2.SetControllerDirection( DIRECT); // * set the controller Direction
 				} else {
-					myPID1.SetControllerDirection(REVERSE);          //
-					myPID2.SetControllerDirection(REVERSE);          //
+					myPID1.SetControllerDirection( REVERSE); //
+					myPID2.SetControllerDirection( REVERSE); //
 				}
 			}
 			received_data_size = 0;
@@ -623,19 +612,18 @@ void SystemClock_Config(void) {
 
 	/**Initializes the CPU, AHB and APB busses clocks
 	 */
-	RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK
-			| RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
+	RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
 	RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
 	RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
 	RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
 	RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-	if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK) {
+	if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct,
+	FLASH_LATENCY_1) != HAL_OK) {
 		Error_Handler();
 	}
 
-	PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USB | RCC_PERIPHCLK_TIM1
-			| RCC_PERIPHCLK_TIM8 | RCC_PERIPHCLK_ADC12 | RCC_PERIPHCLK_ADC34;
+	PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USB | RCC_PERIPHCLK_TIM1 | RCC_PERIPHCLK_TIM8 | RCC_PERIPHCLK_ADC12 | RCC_PERIPHCLK_ADC34;
 	PeriphClkInit.Adc12ClockSelection = RCC_ADC12PLLCLK_DIV1;
 	PeriphClkInit.Adc34ClockSelection = RCC_ADC34PLLCLK_DIV1;
 	PeriphClkInit.USBClockSelection = RCC_USBCLKSOURCE_PLL;
@@ -647,11 +635,12 @@ void SystemClock_Config(void) {
 
 	/**Configure the Systick interrupt time
 	 */
-	HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq() / 10000);
+	HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq() / 1000);
 
 	/**Configure the Systick
 	 */
-	HAL_SYSTICK_CLKSourceConfig(SYSTICK_CLKSOURCE_HCLK);
+	HAL_SYSTICK_CLKSourceConfig(
+	SYSTICK_CLKSOURCE_HCLK);
 
 	/* SysTick_IRQn interrupt configuration */
 	HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
@@ -661,10 +650,10 @@ void SystemClock_Config(void) {
  */
 static void MX_NVIC_Init(void) {
 	/* EXTI9_5_IRQn interrupt configuration */
-	HAL_NVIC_SetPriority(EXTI9_5_IRQn, 15, 0);
+	HAL_NVIC_SetPriority(EXTI9_5_IRQn, 1, 0);
 	HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 	/* EXTI15_10_IRQn interrupt configuration */
-	HAL_NVIC_SetPriority(EXTI15_10_IRQn, 15, 0);
+	HAL_NVIC_SetPriority(EXTI15_10_IRQn, 1, 0);
 	HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 }
 
@@ -744,8 +733,10 @@ static void MX_ADC3_Init(void) {
 
 	/**Configure the ADC multi-mode
 	 */
-	multimode.DMAAccessMode = ADC_DMAACCESSMODE_DISABLED;
-	multimode.TwoSamplingDelay = ADC_TWOSAMPLINGDELAY_1CYCLE;
+	multimode.DMAAccessMode =
+	ADC_DMAACCESSMODE_DISABLED;
+	multimode.TwoSamplingDelay =
+	ADC_TWOSAMPLINGDELAY_1CYCLE;
 	if (HAL_ADCEx_MultiModeConfigChannel(&hadc3, &multimode) != HAL_OK) {
 		Error_Handler();
 	}
@@ -806,11 +797,13 @@ static void MX_TIM1_Init(void) {
 	sConfigOC.OCFastMode = TIM_OCFAST_ENABLE;
 	sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
 	sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_SET;
-	if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1) != HAL_OK) {
+	if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC,
+	TIM_CHANNEL_1) != HAL_OK) {
 		Error_Handler();
 	}
 
-	if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_2) != HAL_OK) {
+	if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC,
+	TIM_CHANNEL_2) != HAL_OK) {
 		Error_Handler();
 	}
 
@@ -858,8 +851,10 @@ static void MX_TIM3_Init(void) {
 		Error_Handler();
 	}
 
-	sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+	sMasterConfig.MasterOutputTrigger =
+	TIM_TRGO_RESET;
+	sMasterConfig.MasterSlaveMode =
+	TIM_MASTERSLAVEMODE_DISABLE;
 	if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK) {
 		Error_Handler();
 	}
@@ -918,7 +913,8 @@ static void MX_TIM8_Init(void) {
 		Error_Handler();
 	}
 
-	sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+	sClockSourceConfig.ClockSource =
+	TIM_CLOCKSOURCE_INTERNAL;
 	if (HAL_TIM_ConfigClockSource(&htim8, &sClockSourceConfig) != HAL_OK) {
 		Error_Handler();
 	}
@@ -941,11 +937,13 @@ static void MX_TIM8_Init(void) {
 	sConfigOC.OCFastMode = TIM_OCFAST_ENABLE;
 	sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
 	sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_SET;
-	if (HAL_TIM_PWM_ConfigChannel(&htim8, &sConfigOC, TIM_CHANNEL_1) != HAL_OK) {
+	if (HAL_TIM_PWM_ConfigChannel(&htim8, &sConfigOC,
+	TIM_CHANNEL_1) != HAL_OK) {
 		Error_Handler();
 	}
 
-	if (HAL_TIM_PWM_ConfigChannel(&htim8, &sConfigOC, TIM_CHANNEL_2) != HAL_OK) {
+	if (HAL_TIM_PWM_ConfigChannel(&htim8, &sConfigOC,
+	TIM_CHANNEL_2) != HAL_OK) {
 		Error_Handler();
 	}
 

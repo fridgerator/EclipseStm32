@@ -44,8 +44,8 @@ bool PID::Compute() {
 	unsigned long timeChange = (now - lastTime);
 	if (timeChange >= SampleTime) {
 		/*Compute all the working error variables*/
-		sprintf(buffer, "%lu timeChange: %lu\n\r", now, timeChange);
-		printUsb(buffer);
+		//sprintf(buffer, "%lu timeChange: %lu\n\r", now, timeChange);
+		//printUsb(buffer);
 
 		float input = *myInput;
 		float error = *mySetpoint - input;
