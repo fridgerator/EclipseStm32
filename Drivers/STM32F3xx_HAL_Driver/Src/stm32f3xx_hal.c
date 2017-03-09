@@ -298,6 +298,7 @@ __weak uint32_t HAL_GetTick(void)
   return uwTick;  
 }
 
+
 /**
   * @brief  This function provides accurate delay (in milliseconds) based 
   *         on variable incremented.

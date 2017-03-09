@@ -50,7 +50,6 @@
 /* USER CODE END Includes */
 
 /* Private define ------------------------------------------------------------*/
-
 #define PWM1_Pin GPIO_PIN_13
 #define PWM1_GPIO_Port GPIOC
 #define INH1_Pin GPIO_PIN_4
@@ -76,6 +75,8 @@
 #define ENC1_Pin GPIO_PIN_7
 #define ENC1_GPIO_Port GPIOB
 /* USER CODE BEGIN Private defines */
+
+
 
 /* USER CODE END Private defines */
 

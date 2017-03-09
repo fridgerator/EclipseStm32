@@ -63,9 +63,10 @@ bool PID::Compute() {
 		*myOutput = output;
 
 		/*Remember some variables for next time*/
-		lastInput = input;
-		lastTime = now;
+		this->lastInput = input;
+		this->lastTime = now;
 		return true;
+
 	} else
 		return false;
 }
