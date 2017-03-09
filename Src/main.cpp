@@ -380,10 +380,12 @@ int main(void) {
 			myPID2.Compute();
 		}
 
+		/*
 		if (i % 150 == 0) {
 			SerialReceive();
 			buildAndSendBuffer();
 		}
+		*/
 
 		if (Output1 < 0.0) {
 			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 2400);
@@ -645,7 +647,7 @@ void SystemClock_Config(void) {
 
 	/**Configure the Systick interrupt time
 	 */
-	HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq() / 100);
+	HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq() / 10000);
 
 	/**Configure the Systick
 	 */

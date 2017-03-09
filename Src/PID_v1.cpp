@@ -5,6 +5,7 @@
  * This Library is licensed under a GPLv3 License
  **********************************************************************************************/
 
+#include "main.h"
 #include "PID_v1.h"
 
 /*Constructor (...)*********************************************************
@@ -22,7 +23,7 @@ PID::PID(float* Input, float* Output, float* Setpoint, float Kp, float Ki,
 	PID::SetOutputLimits(0, 255);				//default output limit corresponds to 
 	//the arduino pwm limits
 
-	SampleTime = 3;							//default Controller Sample Time is 0.1 seconds
+	SampleTime = 5;							//default Controller Sample Time is 0.1 seconds
 
 	PID::SetControllerDirection(ControllerDirection);
 	PID::SetTunings(Kp, Ki, Kd);
@@ -43,8 +44,8 @@ bool PID::Compute() {
 	unsigned long timeChange = (now - lastTime);
 	if (timeChange >= SampleTime) {
 		/*Compute all the working error variables*/
-		sprintf(buffer, "timeChange: %lu\n\r", timeChange);
-		//printUsb(buffer);
+		sprintf(buffer, "%lu timeChange: %lu\n\r", now, timeChange);
+		printUsb(buffer);
 
 		float input = *myInput;
 		float error = *mySetpoint - input;

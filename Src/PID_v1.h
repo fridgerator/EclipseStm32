@@ -7,7 +7,6 @@
 #define DIRECT 0
 
 #include "stm32f3xx_hal.h"
-extern uint8_t printUsb(const char* buf);
 
 class PID {
 public:
@@ -73,7 +72,7 @@ private:
 	unsigned long SampleTime;
 	float outMin, outMax;
 	bool inAuto;
-	char buffer[255];
+	char buffer[30];
 
 };
 #endif
