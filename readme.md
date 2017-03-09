@@ -28,3 +28,4 @@ This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md
 ## Acknowledgments
 
 * guys on ##stm32 irc chat who shared information about USB and F3 chip
+* https://gitter.im/rene-dev/stmbl especially Crinq, Rene Hopf who are generously giving away stm32 knowledge

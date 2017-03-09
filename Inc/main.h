@@ -46,6 +46,7 @@
   /* Includes ------------------------------------------------------------------*/
 
 /* USER CODE BEGIN Includes */
+#include <sys/_stdint.h>
 
 /* USER CODE END Includes */
 
@@ -76,7 +77,7 @@
 #define ENC1_GPIO_Port GPIOB
 /* USER CODE BEGIN Private defines */
 
-
+uint8_t printUsb(const char* buf);
 
 /* USER CODE END Private defines */
 

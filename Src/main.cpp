@@ -58,7 +58,6 @@
 #include <stm32f3xx_hal_rcc_ex.h>
 #include <stm32f3xx_hal_tim.h>
 #include <stm32f3xx_hal_tim_ex.h>
-#include <sys/_stdint.h>
 #include <usb_device.h>
 #include <usbd_cdc.h>
 #include <usbd_def.h>

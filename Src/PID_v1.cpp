@@ -5,7 +5,6 @@
  * This Library is licensed under a GPLv3 License
  **********************************************************************************************/
 
-#include "stm32f3xx_hal.h"
 #include "PID_v1.h"
 
 /*Constructor (...)*********************************************************
@@ -44,6 +43,9 @@ bool PID::Compute() {
 	unsigned long timeChange = (now - lastTime);
 	if (timeChange >= SampleTime) {
 		/*Compute all the working error variables*/
+		sprintf(buffer, "timeChange: %lu\n\r", timeChange);
+		//printUsb(buffer);
+
 		float input = *myInput;
 		float error = *mySetpoint - input;
 		ITerm += (ki * error);

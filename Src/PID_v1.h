@@ -6,6 +6,9 @@
 #define REVERSE 1
 #define DIRECT 0
 
+#include "stm32f3xx_hal.h"
+extern uint8_t printUsb(const char* buf);
+
 class PID {
 public:
 	//Constants used in some of the functions below
@@ -70,6 +73,8 @@ private:
 	unsigned long SampleTime;
 	float outMin, outMax;
 	bool inAuto;
+	char buffer[255];
+
 };
 #endif
 
