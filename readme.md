@@ -15,7 +15,7 @@ Install Ac6 development ide for STM32 micros from: http://www.openstm32.org/Home
 <br>
 Install CubeMX eclipse plugin for openstm32 from: http://www.st.com/en/development-tools/stsw-stm32095.html
 <br>
-CumeMX is beeing able to generate code skeleton.
+CubeMX is beeing able to generate code skeleton.
 
 ## Building
 Project Properties -> C/C++ build -> Builder type -> Internal builder
