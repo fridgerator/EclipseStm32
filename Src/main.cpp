@@ -81,8 +81,8 @@ TIM_HandleTypeDef htim4;
 TIM_HandleTypeDef htim8;
 
 /* USER CODE BEGIN PV */
-uint32_t button1On = 0;
-uint32_t button2On = 0;
+volatile uint8_t button1On = 0;
+volatile uint8_t button2On = 0;
 
 uint32_t button2Count = 0;
 uint32_t button1Count = 0;
@@ -101,8 +101,10 @@ uint32_t enc2Old;
 
 uint32_t tick1, tick2;
 
-uint32_t PWM_RES = 2400;
-int32_t pwm = 2400;
+uint32_t PWM_RES = 1000;
+float pwm1 = 0;
+float pwm2 = 0;
+float dPwm = 0.01;
 
 char buffer[255] = { "" };
 char prev_buffer[255] = { "" };
@@ -128,15 +130,21 @@ bool prvic = false;
 bool slowStopDone = false;
 uint8_t previousButton = 0;
 
-uint16_t g_ADCValue_threshold = 4094;
+// 4094 ... 3.3V
+// x    ... 1.6V
+// x = 1.6*4094/3.3 = 1984
+
+uint16_t g_ADCValue_threshold = 2050;
 //float aggKp = 110, aggKi = 60, aggKd = 1;
 //float aggKp = 70, aggKi = 3, aggKd = 0.2;
-float aggKp = 70, aggKi = 3, aggKd = 0.8;
+float aggKp = 70, aggKi = 35, aggKd = 1;
 
-float Setpoint1 = 32768, Input1 = 32768, Output1, prevOutput1;
-float Input2 = 32768, Output2, prevOutput2;
-PID myPID1 = PID(&Input1, &Output1, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
-PID myPID2 = PID(&Input2, &Output2, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
+float Setpoint1 = 32768, Input1 = 32768, Output2;
+float Input2 = 32768, Output1;
+
+PID myPID2 = PID(&Input1, &Output2, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
+PID myPID1 = PID(&Input2, &Output1, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
+
 char *ftoa(char *a, double f, int precision);
 void buildAndSendBuffer();
 void SerialReceive();
@@ -144,6 +152,7 @@ void slowStop();
 
 /* Private variables ---------------------------------------------------------*/
 
+//prescaler 72000000/(PWM frequency*PWM resolution) – 1
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -166,8 +175,34 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef* htim);
 
 /* USER CODE BEGIN 0 */
 
+/*
+Motor Encoders:
+M1 ENCODERS TIM3 PB4 ... ENC3, PB5 ... ENC4
+M2 ENCODERS TIM4 PB7 ... ENC1, PB6 ... ENC2
+
+Motor Power:
+Motor1 TIM 8 CH2 (PB0), TIM 1 CH2 (PC13)
+Motor2 TIM 8 CH1 (PB14), TIM 1 CH1 (PC13)
+Motor Enable:
+Motor 1 Enable (PB11)
+Motor 2 Enable (PA4)
+
+
+*/
+
+
+
+
 // 310 mV padca na 1kOhm uporu
 // I=U/R -> I = 0.310 V/1000 Ohm = 0.000310 A = 0.3 mA
+void HAL_Delay(__IO uint32_t Delay) {
+	uint32_t tickstart = HAL_GetTick();
+	uint32_t now;
+	while ((now - tickstart) < Delay) {
+		now = HAL_GetTick();
+	}
+}
+
 uint8_t printUsb(const char* buf) {
 	uint16_t Len = strlen(buf);
 
@@ -180,6 +215,10 @@ uint8_t printUsb(const char* buf) {
 	return USBD_FAIL;
 }
 /* USER CODE END 0 */
+void myDelay(uint32_t length) {
+	for (unsigned long k = 0; k < length; k++) {
+	}
+}
 
 void resetPwm(uint32_t i) {
 //printUsb(buffer);
@@ -187,22 +226,27 @@ void resetPwm(uint32_t i) {
 // Reset pulse at INH and IN pin (INH, IN1 and IN2 low)
 	HAL_GPIO_WritePin(INH1_GPIO_Port, INH1_Pin, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(INH2_GPIO_Port, INH2_Pin, GPIO_PIN_RESET);
+	myDelay(1000);
+	//HAL_Delay(100);
 	__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, 0);
 	__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 0);
 	__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 0);
 	__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
-	HAL_Delay(50);
-	HAL_GPIO_WritePin(INH1_GPIO_Port,INH1_Pin, GPIO_PIN_SET);
-	HAL_GPIO_WritePin(INH2_GPIO_Port,INH2_Pin, GPIO_PIN_SET);
+	myDelay(100000);
+	//HAL_Delay(100);
+
+	HAL_GPIO_WritePin(INH1_GPIO_Port, INH1_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(INH2_GPIO_Port, INH2_Pin, GPIO_PIN_SET);
 
 // t_reset = 8us for BTM7752Gb
-	pwm = 2400;
 	sprintf(buffer, "%lu Resetted.\n\r", i);
 	printUsb(buffer);
 	alreadyResetted = 1;
 }
 
 int main(void) {
+//	myPID1.SetControllerDirection(REVERSE);
+//	myPID2.SetControllerDirection(DIRECT);
 
 	/* USER CODE BEGIN 1 */
 
@@ -245,16 +289,17 @@ int main(void) {
 	__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
 	__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 0);
 
-	myPID1.SetOutputLimits(-2400, 2400);
-	myPID1.SetMode(AUTOMATIC);
-	myPID2.SetOutputLimits(-2400, 2400);
 	myPID2.SetMode(AUTOMATIC);
+	myPID2.SetOutputLimits(-1000.0, 1000.0);
+	myPID1.SetMode(AUTOMATIC);
+	myPID1.SetOutputLimits(-1000.0, 1000.0);
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
 
-	int32_t i = 0;
+	uint32_t i = 0;
+	uint32_t iOfStandStill = 1;
 	int32_t i_emergStop = 0;
 
 	HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
@@ -289,7 +334,7 @@ int main(void) {
 		printUsb("Error starting encoder 4");
 	}
 
-	HAL_Delay(100);
+	//HAL_Delay(100);
 	resetPwm(0);
 
 	while (1) {
@@ -298,39 +343,51 @@ int main(void) {
 		/* USER CODE BEGIN 3 */
 		i++;
 
-		HAL_ADC_Start(&hadc1);
-		if (HAL_ADC_PollForConversion(&hadc1, 100000) == HAL_OK) {
-			g_ADCValue1 = HAL_ADC_GetValue(&hadc1);
-		}
-		HAL_ADC_Start(&hadc3);
-		if (HAL_ADC_PollForConversion(&hadc3, 100000) == HAL_OK) {
-			g_ADCValue3 = HAL_ADC_GetValue(&hadc3);
-		}
+		g_ADCValue1 = 0;
+		g_ADCValue3 = 0;
 
-		g_ADCValue = MAX(g_ADCValue1, g_ADCValue3);
-		if (g_ADCValue > g_ADCValue_threshold && !emergencyStop) {
-			slowStop();
-			resetPwm(i);
-			HAL_Delay(200);
-			//calculate new position
-			if (Setpoint1 > Input1) {
-				Setpoint1 = Input1 - 30;
-			} else {
-				Setpoint1 = Input1 + 30;
+		bool controlPower = true;
+		if (controlPower) {
+			HAL_ADC_Start(&hadc1);
+			if (HAL_ADC_PollForConversion(&hadc1, 100000) == HAL_OK) {
+				g_ADCValue1 = HAL_ADC_GetValue(&hadc1);
+				HAL_ADC_Start(&hadc3);
+				if (HAL_ADC_PollForConversion(&hadc3, 100000) == HAL_OK) {
+					g_ADCValue3 = HAL_ADC_GetValue(&hadc3);
+
+					g_ADCValue = MAX(g_ADCValue1, g_ADCValue3);
+					sprintf(buffer, "ADC: %d\t%d\n", g_ADCValue1, g_ADCValue3);
+					printUsb(buffer);
+
+					if (g_ADCValue > g_ADCValue_threshold) {
+						sprintf(buffer, "ADC trigered: %d\n", g_ADCValue);
+						printUsb(buffer);
+						//slowStop();
+						resetPwm(i);
+						HAL_Delay(1000);
+						if (!emergencyStop) {
+							if (Setpoint1 > Input2) {
+								Setpoint1 = Input2 - 15;
+							} else {
+								Setpoint1 = Input2 + 15;
+							}
+							emergencyStop = true;
+							i_emergStop = i;
+						}
+					}
+				}
 			}
-			emergencyStop = true;
-			i_emergStop = i;
 		}
 
 		//g_ADCValue1 = aADCxonvertedValues1[0];
 		//g_ADCValue3 = aADCxConvertedValues3[0];
 
-		if(button1On == 0 && button2On == 0)
-		{
+		if (button1On == 0 && button2On == 0) {
 			previousButton = 0;
-			prvic=false;
+			prvic = false;
+			if (iOfStandStill == 0)
+				iOfStandStill = i;
 		}
-
 
 		if (emergencyStop && (i - i_emergStop) > 3000) {
 			//reset stepper drivers BTM7752G
@@ -347,67 +404,91 @@ int main(void) {
 		Input2 = htim4.Instance->CNT;
 
 		if (button2On == 1 && !emergencyStop) {
+			// UP BUTTON PRESSED
 			alreadyResetted = 0;
 			if (prvic == false && previousButton != 2) {
 				resetPwm(i);
 				prvic = true;
 			}
-			if (Setpoint1 < Input1 + 120) {
+			if (Setpoint1 < Input1 + 27) {
 				Setpoint1 = Setpoint1 + 1;
 			}
 			previousButton = 2;
+			iOfStandStill = 0;
 		}
 
 		if (button1On == 1 && !emergencyStop) {
+			// DOWN BUTTON PRESSED
 			alreadyResetted = 0;
 			if (prvic == false && previousButton != 1) {
 				resetPwm(i);
 				prvic = true;
 			}
-			if (Setpoint1 > Input1 - 120) {
+			if (Setpoint1 > Input2 - 27) {
 				Setpoint1 = Setpoint1 - 1;
 			}
 			previousButton = 1;
+			iOfStandStill = 0;
 		}
 
-		myPID1.Compute();
 		myPID2.Compute();
+		myPID1.Compute();
+
+		/*
+		 if (Output1 > pwm1)
+		 pwm1 = pwm1 + dPwm;
+		 if (Output1 < pwm1)
+		 pwm1 = pwm1 - dPwm;
+
+		 if (Output2 > pwm2)
+		 pwm2 = pwm2 + dPwm;
+		 if (Output2 < pwm2)
+		 pwm2 = pwm2 - dPwm;
+		 */
+
+		/*
+		 if (i > iOfStandStill + 10000 && iOfStandStill > 0) {
+		 if (abs(Setpoint1 - Input1) < 10)
+		 Output1 = 0;
+		 if (abs(Setpoint1 - Input2) < 10)
+		 Output2 = 0;
+		 }
+		 */
 
 		if (i % 150 == 0) {
 			SerialReceive();
 			buildAndSendBuffer();
 		}
 
-		if (Output1 < 0.0) {
+		// MOTOR 2
+		if (Output2 < 0.0) {
 			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, 0);
 			if (prvic) {
-				HAL_Delay(5);
+				myDelay(10000);
 			}
-			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, abs(Output1));
-		} else if (Output1 > 0.0) {
-			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, abs(Output1));
+			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, abs(Output2));
+		} else if (Output2 > 0.0) {
+			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, abs(Output2));
 			if (prvic) {
-				HAL_Delay(5);
+				myDelay(10000);
+			}
+			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 0);
+		}
+
+		// MOTOR 1
+		if (Output1 < 0.0) {
+			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, abs(Output1));
+			if (prvic) {
+				myDelay(10000);
 			}
 			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 0);
-		}
-		prevOutput1 = Output1;
-
-		if (Output2 < 0.0) {
-			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 0);
-			if (prvic) {
-				HAL_Delay(5);
-			}
-			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, abs(Output2));
-		} else if (Output2 > 0.0) {
-			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, abs(Output2));
-			if (prvic) {
-				HAL_Delay(5);
-			}
+		} else if (Output1 > 0.0) {
 			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
+			if (prvic) {
+				myDelay(10000);
+			}
+			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, abs(Output1));
 		}
-
-		prevOutput2 = Output2;
 
 	}
 	/* USER CODE END 3 */
@@ -415,27 +496,29 @@ int main(void) {
 }
 
 void slowStop() {
-	while (round(Output1) != 0 && round(Output1) != 0) {
-		if (Output1 < 0.0) {
-			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 2400);
-			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, 2400 - abs(Output1));
-			Output1++;
-		} else if (Output1 > 0.0) {
-			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, 2400);
-			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 2400 - abs(Output1));
-			Output1--;
+	while (round(abs(Output1)) > 2 || round(abs(Output2)) > 2) {
+		if (Output2 < 0.0) {
+			Output2 = Output2 + (round(abs(Output2) / 10) + 1);
+			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 0);
+			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, abs(Output2));
+		} else if (Output2 > 0.0) {
+			Output2 = Output2 - (round(abs(Output2) / 10) + 1);
+			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, 0);
+			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, abs(Output2));
 		}
 
-		if (Output2 < 0.0) {
-			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 2400);
-			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 2400 - abs(Output2));
-			Output2++;
-		} else if (Output2 > 0.0) {
-			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 2400);
-			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 2400 - abs(Output2));
-			Output2--;
+		if (Output1 < 0.0) {
+			Output1 = Output1 + (round(abs(Output1) / 10) + 1);
+			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
+			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, abs(Output1));
+		} else if (Output1 > 0.0) {
+			Output1 = Output1 - (round(abs(Output1) / 10) + 1);
+			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 0);
+			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, abs(Output1));
 		}
-		HAL_Delay(2);
+		// pause for 0.1 seconds.
+		HAL_Delay(100);
+		//myDelay(100000);
 	}
 	slowStopDone = true;
 }
@@ -444,35 +527,35 @@ void buildAndSendBuffer() {
 	char f1[10];
 	char f2[10];
 	char f3[10];
-	sprintf(buffer, "sp=%s, input=%s, output=%s\n\r", ftoa(f1, Setpoint1, 3), ftoa(f2, Input1, 3), ftoa(f3, Output1, 3));
+	sprintf(buffer, "sp=%s, input=%s, output=%s\n\r", ftoa(f1, Setpoint1, 3), ftoa(f2, Input1, 3), ftoa(f3, Output2, 3));
 
 	strcpy(buffer, "PID ");
 	strcat(buffer, ftoa(f1, Setpoint1, 3));
 	strcat(buffer, " ");
 
-	strcat(buffer, ftoa(f1, Input1, 3));
+	strcat(buffer, ftoa(f1, Input2, 3));
 	strcat(buffer, " ");
 
 	strcat(buffer, ftoa(f1, Output1, 3));
 	strcat(buffer, " ");
 
-	strcat(buffer, ftoa(f1, myPID2.GetKp(), 3));
+	strcat(buffer, ftoa(f1, myPID1.GetKp(), 3));
 	strcat(buffer, " ");
 
-	strcat(buffer, ftoa(f1, myPID2.GetKi(), 3));
+	strcat(buffer, ftoa(f1, myPID1.GetKi(), 3));
 	strcat(buffer, " ");
 
-	strcat(buffer, ftoa(f1, myPID2.GetKd(), 3));
+	strcat(buffer, ftoa(f1, myPID1.GetKd(), 3));
 	strcat(buffer, " ");
 
-	if (myPID2.GetMode() == AUTOMATIC)
+	if (myPID1.GetMode() == AUTOMATIC)
 		strcat(buffer, "Automatic");
 	else
 		strcat(buffer, "Manual");
 
 	strcat(buffer, " ");
 
-	if (myPID2.GetDirection() == DIRECT)
+	if (myPID1.GetDirection() == DIRECT)
 		strcat(buffer, "Direct");
 	else
 		strcat(buffer, "Reverse");
@@ -526,33 +609,33 @@ void SerialReceive() {
 				//Input=double(foo.asFloat[1]);       // * the user has the ability to send the
 				//   value of "Input"  in most cases (as
 				//   in this one) this is not needed.
-				if (Auto_Man == 0) // * only change the output if we are in
+				if (Auto_Man == 0)			// * only change the output if we are in
 						{ //   manual mode.  otherwise we'll get an
-					Output1 = double(floatUnion.asFloat[2]); //   output blip, then the controller will
 					Output2 = double(floatUnion.asFloat[2]); //   output blip, then the controller will
+					Output1 = double(floatUnion.asFloat[2]); //   output blip, then the controller will
 				} //   overwrite.
 				g_ADCValue_threshold = byteUnion.asInt[0];
 				double p, i, d; // * read in and set the controller tunings
 				p = double(floatUnion.asFloat[3]); //
 				i = double(floatUnion.asFloat[4]); //
 				d = double(floatUnion.asFloat[5]); //
-				myPID1.SetTunings(p, i, d); //
 				myPID2.SetTunings(p, i, d); //
+				myPID1.SetTunings(p, i, d); //
 
 				if (Auto_Man == 0) {
-					myPID1.SetMode(MANUAL); // * set the controller mode
 					myPID2.SetMode(MANUAL); // * set the controller mode
+					myPID1.SetMode(MANUAL); // * set the controller mode
 				} else {
-					myPID1.SetMode(AUTOMATIC); //
 					myPID2.SetMode(AUTOMATIC); //
+					myPID1.SetMode(AUTOMATIC); //
 				}
 
 				if (Direct_Reverse == 0) {
-					myPID1.SetControllerDirection( DIRECT); // * set the controller Direction
 					myPID2.SetControllerDirection( DIRECT); // * set the controller Direction
+					myPID1.SetControllerDirection( DIRECT); // * set the controller Direction
 				} else {
-					myPID1.SetControllerDirection( REVERSE); //
 					myPID2.SetControllerDirection( REVERSE); //
+					myPID1.SetControllerDirection( REVERSE); //
 				}
 			}
 			received_data_size = 0;
@@ -660,7 +743,7 @@ static void MX_ADC1_Init(void) {
 	hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
 	hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
 	hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-	hadc1.Init.NbrOfConversion = 3;
+	hadc1.Init.NbrOfConversion = 1;
 	hadc1.Init.DMAContinuousRequests = DISABLE;
 	hadc1.Init.EOCSelection = ADC_EOC_SEQ_CONV;
 	hadc1.Init.LowPowerAutoWait = DISABLE;
@@ -672,7 +755,7 @@ static void MX_ADC1_Init(void) {
 	/**Configure the ADC multi-mode
 	 */
 	multimode.DMAAccessMode = ADC_DMAACCESSMODE_DISABLED;
-	multimode.TwoSamplingDelay = ADC_TWOSAMPLINGDELAY_1CYCLE;
+	multimode.TwoSamplingDelay = ADC_SAMPLETIME_601CYCLES_5;
 	if (HAL_ADCEx_MultiModeConfigChannel(&hadc1, &multimode) != HAL_OK) {
 		Error_Handler();
 	}
@@ -682,7 +765,7 @@ static void MX_ADC1_Init(void) {
 	sConfig.Channel = ADC_CHANNEL_1;
 	sConfig.Rank = 1;
 	sConfig.SingleDiff = ADC_SINGLE_ENDED;
-	sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
+	sConfig.SamplingTime = ADC_SAMPLETIME_7CYCLES_5;
 	sConfig.OffsetNumber = ADC_OFFSET_NONE;
 	sConfig.Offset = 0;
 	if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK) {
@@ -708,7 +791,7 @@ static void MX_ADC3_Init(void) {
 	hadc3.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
 	hadc3.Init.ExternalTrigConv = ADC_SOFTWARE_START;
 	hadc3.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-	hadc3.Init.NbrOfConversion = 3;
+	hadc3.Init.NbrOfConversion = 1;
 	hadc3.Init.DMAContinuousRequests = DISABLE;
 	hadc3.Init.EOCSelection = ADC_EOC_SEQ_CONV;
 	hadc3.Init.LowPowerAutoWait = DISABLE;
@@ -719,10 +802,8 @@ static void MX_ADC3_Init(void) {
 
 	/**Configure the ADC multi-mode
 	 */
-	multimode.DMAAccessMode =
-	ADC_DMAACCESSMODE_DISABLED;
-	multimode.TwoSamplingDelay =
-	ADC_TWOSAMPLINGDELAY_1CYCLE;
+	multimode.DMAAccessMode = ADC_DMAACCESSMODE_DISABLED;
+	multimode.TwoSamplingDelay = ADC_TWOSAMPLINGDELAY_1CYCLE;
 	if (HAL_ADCEx_MultiModeConfigChannel(&hadc3, &multimode) != HAL_OK) {
 		Error_Handler();
 	}
@@ -732,7 +813,7 @@ static void MX_ADC3_Init(void) {
 	sConfig.Channel = ADC_CHANNEL_1;
 	sConfig.Rank = 1;
 	sConfig.SingleDiff = ADC_SINGLE_ENDED;
-	sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
+	sConfig.SamplingTime = ADC_SAMPLETIME_7CYCLES_5;
 	sConfig.OffsetNumber = ADC_OFFSET_NONE;
 	sConfig.Offset = 0;
 	if (HAL_ADC_ConfigChannel(&hadc3, &sConfig) != HAL_OK) {
@@ -752,7 +833,7 @@ static void MX_TIM1_Init(void) {
 	htim1.Instance = TIM1;
 	htim1.Init.Prescaler = 0;
 	htim1.Init.CounterMode = TIM_COUNTERMODE_CENTERALIGNED1;
-	htim1.Init.Period = 2400;
+	htim1.Init.Period = 1000;
 	htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
 	htim1.Init.RepetitionCounter = 0;
 	htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -837,10 +918,8 @@ static void MX_TIM3_Init(void) {
 		Error_Handler();
 	}
 
-	sMasterConfig.MasterOutputTrigger =
-	TIM_TRGO_RESET;
-	sMasterConfig.MasterSlaveMode =
-	TIM_MASTERSLAVEMODE_DISABLE;
+	sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
 	if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK) {
 		Error_Handler();
 	}
@@ -855,12 +934,12 @@ static void MX_TIM4_Init(void) {
 
 	htim4.Instance = TIM4;
 	htim4.Init.Prescaler = 3;
-	htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
+	htim4.Init.CounterMode = TIM_COUNTERMODE_DOWN;
 	htim4.Init.Period = 0xFFFF;
 	htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
 	htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
 	sConfig.EncoderMode = TIM_ENCODERMODE_TI12;
-	sConfig.IC1Polarity = TIM_ICPOLARITY_RISING;
+	sConfig.IC1Polarity = TIM_ICPOLARITY_FALLING;
 	sConfig.IC1Selection = TIM_ICSELECTION_DIRECTTI;
 	sConfig.IC1Prescaler = TIM_ICPSC_DIV4;
 	sConfig.IC1Filter = 5;
@@ -891,7 +970,7 @@ static void MX_TIM8_Init(void) {
 	htim8.Instance = TIM8;
 	htim8.Init.Prescaler = 0;
 	htim8.Init.CounterMode = TIM_COUNTERMODE_CENTERALIGNED1;
-	htim8.Init.Period = 2400;
+	htim8.Init.Period = 1000;
 	htim8.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
 	htim8.Init.RepetitionCounter = 0;
 	htim8.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -899,8 +978,7 @@ static void MX_TIM8_Init(void) {
 		Error_Handler();
 	}
 
-	sClockSourceConfig.ClockSource =
-	TIM_CLOCKSOURCE_INTERNAL;
+	sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
 	if (HAL_TIM_ConfigClockSource(&htim8, &sClockSourceConfig) != HAL_OK) {
 		Error_Handler();
 	}
