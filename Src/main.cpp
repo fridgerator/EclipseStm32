@@ -64,6 +64,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <inttypes.h>
 
 #include "PID_v1.h"
 
@@ -129,18 +130,24 @@ bool emergencyStop = false;
 bool prvic = false;
 bool slowStopDone = false;
 uint8_t previousButton = 0;
+bool inPidCorrection = false;
+
+float speedRamp = 0.3; // [increment of PWM / ms]
 
 // 4094 ... 3.3V
 // x    ... 1.6V
 // x = 1.6*4094/3.3 = 1984
 
-uint16_t g_ADCValue_threshold = 2050;
+uint16_t g_ADCValue_threshold = 1000;
 //float aggKp = 110, aggKi = 60, aggKd = 1;
 //float aggKp = 70, aggKi = 3, aggKd = 0.2;
 float aggKp = 70, aggKi = 35, aggKd = 1;
 
 float Setpoint1 = 32768, Input1 = 32768, Output2;
 float Input2 = 32768, Output1;
+
+float Output2_adj;
+float Output1_adj;
 
 PID myPID2 = PID(&Input1, &Output2, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
 PID myPID1 = PID(&Input2, &Output1, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
@@ -176,22 +183,62 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef* htim);
 /* USER CODE BEGIN 0 */
 
 /*
-Motor Encoders:
-M1 ENCODERS TIM3 PB4 ... ENC3, PB5 ... ENC4
-M2 ENCODERS TIM4 PB7 ... ENC1, PB6 ... ENC2
+ Motor Encoders:
+ M1 ENCODERS TIM3 PB4 ... ENC3, PB5 ... ENC4
+ M2 ENCODERS TIM4 PB7 ... ENC1, PB6 ... ENC2
 
-Motor Power:
-Motor1 TIM 8 CH2 (PB0), TIM 1 CH2 (PC13)
-Motor2 TIM 8 CH1 (PB14), TIM 1 CH1 (PC13)
-Motor Enable:
-Motor 1 Enable (PB11)
-Motor 2 Enable (PA4)
-
-
-*/
+ Motor Power:
+ Motor1 TIM 8 CH2 (PB0), TIM 1 CH2 (PC13)
+ Motor2 TIM 8 CH1 (PB14), TIM 1 CH1 (PC13)
+ Motor Enable:
+ Motor 1 Enable (PB11)
+ Motor 2 Enable (PA4)
 
 
+ */
 
+static int8_t sign(float val1, float val2) {
+	if (val1 > val2)
+		return 1;
+	else if (val1 < val2)
+		return -1;
+
+	return 0;
+}
+
+// test pwms
+void testPWMs() {
+	int i = 0;
+	int sign = 1;
+	while (true) {
+		i++;
+		if (i % 300 == 0) {
+			Output1 = Output1 + sign;
+			Output2 = Output2 + sign;
+			if (Output1 == 800 || Output1 == -800) {
+				sign = -1 * sign;
+			}
+		}
+
+		// MOTOR 2
+		if (Output2 < 0.0) {
+			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, 0);
+			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, abs(Output2));
+		} else if (Output2 > 0.0) {
+			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, abs(Output2));
+			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 0);
+		}
+
+		// MOTOR 1
+		if (Output1 < 0.0) {
+			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 0);
+			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, abs(Output1));
+		} else if (Output1 > 0.0) {
+			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, abs(Output1));
+			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
+		}
+	}
+}
 
 // 310 mV padca na 1kOhm uporu
 // I=U/R -> I = 0.310 V/1000 Ohm = 0.000310 A = 0.3 mA
@@ -226,13 +273,13 @@ void resetPwm(uint32_t i) {
 // Reset pulse at INH and IN pin (INH, IN1 and IN2 low)
 	HAL_GPIO_WritePin(INH1_GPIO_Port, INH1_Pin, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(INH2_GPIO_Port, INH2_Pin, GPIO_PIN_RESET);
-	myDelay(1000);
+	myDelay(10000);
 	//HAL_Delay(100);
 	__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, 0);
 	__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 0);
 	__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 0);
 	__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
-	myDelay(100000);
+	myDelay(10000);
 	//HAL_Delay(100);
 
 	HAL_GPIO_WritePin(INH1_GPIO_Port, INH1_Pin, GPIO_PIN_SET);
@@ -299,6 +346,7 @@ int main(void) {
 	/* USER CODE BEGIN WHILE */
 
 	uint32_t i = 0;
+	uint32_t previous_i = 0;
 	uint32_t iOfStandStill = 1;
 	int32_t i_emergStop = 0;
 
@@ -336,6 +384,7 @@ int main(void) {
 
 	//HAL_Delay(100);
 	resetPwm(0);
+	//testPWMs();
 
 	while (1) {
 		/* USER CODE END WHILE */
@@ -346,41 +395,57 @@ int main(void) {
 		g_ADCValue1 = 0;
 		g_ADCValue3 = 0;
 
-		bool controlPower = true;
-		if (controlPower) {
+		bool controlPower1 = true;
+		bool controlPower2 = false;
+		if (controlPower1 && !emergencyStop) {
 			HAL_ADC_Start(&hadc1);
 			if (HAL_ADC_PollForConversion(&hadc1, 100000) == HAL_OK) {
-				g_ADCValue1 = HAL_ADC_GetValue(&hadc1);
-				HAL_ADC_Start(&hadc3);
-				if (HAL_ADC_PollForConversion(&hadc3, 100000) == HAL_OK) {
-					g_ADCValue3 = HAL_ADC_GetValue(&hadc3);
+				if ((HAL_ADC_GetState(&hadc1) & HAL_ADC_STATE_REG_EOC) == HAL_ADC_STATE_REG_EOC) {
+					g_ADCValue1 = HAL_ADC_GetValue(&hadc1);
+					HAL_ADC_Start(&hadc3);
+					if (HAL_ADC_PollForConversion(&hadc3, 100000) == HAL_OK) {
+						if ((HAL_ADC_GetState(&hadc3) & HAL_ADC_STATE_REG_EOC) == HAL_ADC_STATE_REG_EOC) {
+							g_ADCValue3 = HAL_ADC_GetValue(&hadc3);
 
-					g_ADCValue = MAX(g_ADCValue1, g_ADCValue3);
-					sprintf(buffer, "ADC: %d\t%d\n", g_ADCValue1, g_ADCValue3);
-					printUsb(buffer);
-
-					if (g_ADCValue > g_ADCValue_threshold) {
-						sprintf(buffer, "ADC trigered: %d\n", g_ADCValue);
-						printUsb(buffer);
-						//slowStop();
-						resetPwm(i);
-						HAL_Delay(1000);
-						if (!emergencyStop) {
-							if (Setpoint1 > Input2) {
-								Setpoint1 = Input2 - 15;
-							} else {
-								Setpoint1 = Input2 + 15;
+							g_ADCValue = MAX(g_ADCValue1, g_ADCValue3);
+							if (g_ADCValue1 > 0 || g_ADCValue3 > 0) {
+								sprintf(buffer, "ADC: %" PRIu32 "\t%" PRIu32 "\n", g_ADCValue1, g_ADCValue3);
+								printUsb(buffer);
 							}
-							emergencyStop = true;
-							i_emergStop = i;
+
+							if (g_ADCValue > g_ADCValue_threshold) {
+								sprintf(buffer, "ADC trigered: %" PRIu32 "%" PRIu32 "\n", g_ADCValue1, g_ADCValue3);
+								printUsb(buffer);
+								//slowStop();
+								resetPwm(i);
+								HAL_Delay(15000);
+								if (!emergencyStop) {
+									if (Setpoint1 > Input2) {
+										Setpoint1 = Input2 - 15;
+									} else {
+										Setpoint1 = Input2 + 15;
+									}
+									emergencyStop = true;
+									i_emergStop = i;
+								}
+							}
 						}
 					}
 				}
 			}
 		}
 
-		//g_ADCValue1 = aADCxonvertedValues1[0];
-		//g_ADCValue3 = aADCxConvertedValues3[0];
+		if (controlPower2)
+			if (GPIO_PIN_RESET == HAL_GPIO_ReadPin(OCDA_GPIO_Port, OCDA_Pin) || GPIO_PIN_RESET == HAL_GPIO_ReadPin(OCDB_GPIO_Port, OCDB_Pin)) {
+				if (Setpoint1 > Input2) {
+					Setpoint1 = Input2 - 15;
+				} else {
+					Setpoint1 = Input2 + 15;
+				}
+				emergencyStop = true;
+				i_emergStop = i;
+				myDelay(50000);
+			}
 
 		if (button1On == 0 && button2On == 0) {
 			previousButton = 0;
@@ -389,9 +454,9 @@ int main(void) {
 				iOfStandStill = i;
 		}
 
-		if (emergencyStop && (i - i_emergStop) > 3000) {
+		if (emergencyStop && (i - i_emergStop) > 10000) {
 			//reset stepper drivers BTM7752G
-			if (abs(Setpoint1 - Input1) < 10 && abs(Setpoint1 - Input2) < 10) {
+			if (abs(Setpoint1 - Input1) < 3 && abs(Setpoint1 - Input2) < 3) {
 				if (alreadyResetted != 1) {
 					resetPwm(i);
 				}
@@ -403,14 +468,19 @@ int main(void) {
 		Input1 = htim3.Instance->CNT;
 		Input2 = htim4.Instance->CNT;
 
+		if (inPidCorrection == false)
+			if (Input1 == Setpoint1)
+				inPidCorrection = true;
+
 		if (button2On == 1 && !emergencyStop) {
 			// UP BUTTON PRESSED
+			inPidCorrection = false;
 			alreadyResetted = 0;
 			if (prvic == false && previousButton != 2) {
 				resetPwm(i);
 				prvic = true;
 			}
-			if (Setpoint1 < Input1 + 27) {
+			if (Setpoint1 < Input2 + 27) {
 				Setpoint1 = Setpoint1 + 1;
 			}
 			previousButton = 2;
@@ -418,6 +488,7 @@ int main(void) {
 		}
 
 		if (button1On == 1 && !emergencyStop) {
+			inPidCorrection = false;
 			// DOWN BUTTON PRESSED
 			alreadyResetted = 0;
 			if (prvic == false && previousButton != 1) {
@@ -430,67 +501,56 @@ int main(void) {
 			previousButton = 1;
 			iOfStandStill = 0;
 		}
+		//HAL_Delay(1);
 
-		myPID2.Compute();
 		myPID1.Compute();
+		myPID2.Compute();
 
-		/*
-		 if (Output1 > pwm1)
-		 pwm1 = pwm1 + dPwm;
-		 if (Output1 < pwm1)
-		 pwm1 = pwm1 - dPwm;
-
-		 if (Output2 > pwm2)
-		 pwm2 = pwm2 + dPwm;
-		 if (Output2 < pwm2)
-		 pwm2 = pwm2 - dPwm;
-		 */
-
-		/*
-		 if (i > iOfStandStill + 10000 && iOfStandStill > 0) {
-		 if (abs(Setpoint1 - Input1) < 10)
-		 Output1 = 0;
-		 if (abs(Setpoint1 - Input2) < 10)
-		 Output2 = 0;
-		 }
-		 */
-
-		if (i % 150 == 0) {
+		if (i % 300 == 0) {  // print reasults over usb every 300ms
 			SerialReceive();
 			buildAndSendBuffer();
 		}
 
-		// MOTOR 2
-		if (Output2 < 0.0) {
-			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, 0);
-			if (prvic) {
-				myDelay(10000);
-			}
-			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, abs(Output2));
-		} else if (Output2 > 0.0) {
-			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, abs(Output2));
-			if (prvic) {
-				myDelay(10000);
-			}
-			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 0);
-		}
+		if (previous_i != i) { // we are calculating output to motors each ms
+			// calculate adjusted pwm powers
+			//uint16_t* Output1_int = reinterpret_cast<uint16_t*>(&Output1);
+			//uint16_t Output1_int = (uint16_t)Output1;
 
-		// MOTOR 1
-		if (Output1 < 0.0) {
-			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, abs(Output1));
-			if (prvic) {
-				myDelay(10000);
+			int32_t o2, o1;
+//			if (inPidCorrection) { 			// for startup we use slow start - if user still holds key
+//				Output2_adj = (int32_t) Output2;
+//				Output1_adj = (int32_t) Output1;
+//			} else {  // if user doesn't hold UP/DOWN key we leave the PID to fix asap
+				int8_t sign1 = sign(Output1, Output1_adj);
+				Output1_adj = Output1_adj + sign1 * speedRamp;
+				int8_t sign2 = sign(Output2, Output2_adj);
+				Output2_adj = Output2_adj + sign2 * speedRamp;
+//			}
+			o2 = (int32_t) Output2_adj;
+			o1 = (int32_t) Output1_adj;
+			// output PWM
+			// MOTOR 2
+			if (o2 < 0.0) {
+				__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, 0);
+				__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, abs(o2));
+			} else if (o2 > 0.0) {
+				__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, abs(o2));
+				__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 0);
 			}
-			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 0);
-		} else if (Output1 > 0.0) {
-			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
-			if (prvic) {
-				myDelay(10000);
-			}
-			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, abs(Output1));
-		}
 
+			// MOTOR 1
+			if (o1 < 0.0) {
+				__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 0);
+				__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, abs(o1));
+			} else if (o1 > 0.0) {
+				__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, abs(o1));
+				__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
+			}
+		}
 	}
+
+	previous_i = i;
+
 	/* USER CODE END 3 */
 
 }

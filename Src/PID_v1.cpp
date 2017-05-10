@@ -20,8 +20,8 @@ PID::PID(float* Input, float* Output, float* Setpoint, float Kp, float Ki,
 	mySetpoint = Setpoint;
 	inAuto = false;
 
+	SampleTime = 1;											//default Controller Sample Time is 0.1 seconds
 	PID::SetOutputLimits(0, 255);				//default output limit corresponds to pwm limits
-	SampleTime = 5;											//default Controller Sample Time is 0.1 seconds
 
 	PID::SetControllerDirection(ControllerDirection);
 	PID::SetTunings(Kp, Ki, Kd);
@@ -39,8 +39,8 @@ bool PID::Compute() {
 	if (!inAuto)
 		return false;
 	unsigned long now = HAL_GetTick();
-	unsigned long timeChange = (now - lastTime);
-	if (timeChange >= SampleTime) {
+	unsigned long timeChange = (now - this->lastTime);
+	if (timeChange >= this->SampleTime) {
 		/*Compute all the working error variables*/
 		//sprintf(buffer, "%lu timeChange: %lu\n\r", now, timeChange);
 		//printUsb(buffer);

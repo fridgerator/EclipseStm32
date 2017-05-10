@@ -54,6 +54,12 @@
 #define PWM1_Pin GPIO_PIN_13
 #define PWM1_GPIO_Port GPIOC
 #define INH1_Pin GPIO_PIN_4
+
+#define OCDB_GPIO_Port GPIOA
+#define OCDB_Pin GPIO_PIN_5
+#define OCDA_GPIO_Port GPIOA
+#define OCDA_Pin GPIO_PIN_6
+
 #define INH1_GPIO_Port GPIOA
 #define PWM3_Pin GPIO_PIN_7
 #define PWM3_GPIO_Port GPIOA
