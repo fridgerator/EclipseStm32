@@ -93,7 +93,7 @@ uint32_t alreadyResetted = 0;
 uint32_t g_ADCValue1 = 0;
 uint32_t g_ADCValue3 = 0;
 
-uint32_t g_ADCValue = 0;
+float g_ADCValue = 0;
 
 uint32_t enc1;
 uint32_t enc2;
@@ -132,13 +132,18 @@ bool slowStopDone = false;
 uint8_t previousButton = 0;
 bool inPidCorrection = false;
 
-float speedRamp = 0.3; // [increment of PWM / ms]
+float speedRamp = 0.1; // [increment of PWM / ms]
 
 // 4094 ... 3.3V
 // x    ... 1.6V
 // x = 1.6*4094/3.3 = 1984
 
-uint16_t g_ADCValue_threshold = 1000;
+uint16_t g_ADCValue_threshold = 600;
+uint16_t adcMaxMeasureCount = 10;
+uint16_t adcMeasureCount = 0;
+uint32_t adc3sum, adc1sum;
+float adc3Average, adc1Average;
+
 //float aggKp = 110, aggKi = 60, aggKd = 1;
 //float aggKp = 70, aggKi = 3, aggKd = 0.2;
 float aggKp = 70, aggKi = 35, aggKd = 1;
@@ -148,6 +153,7 @@ float Input2 = 32768, Output1;
 
 float Output2_adj;
 float Output1_adj;
+int32_t o2, o1;
 
 PID myPID2 = PID(&Input1, &Output2, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
 PID myPID1 = PID(&Input2, &Output1, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
@@ -156,6 +162,7 @@ char *ftoa(char *a, double f, int precision);
 void buildAndSendBuffer();
 void SerialReceive();
 void slowStop();
+void fastStop();
 
 /* Private variables ---------------------------------------------------------*/
 
@@ -407,28 +414,46 @@ int main(void) {
 						if ((HAL_ADC_GetState(&hadc3) & HAL_ADC_STATE_REG_EOC) == HAL_ADC_STATE_REG_EOC) {
 							g_ADCValue3 = HAL_ADC_GetValue(&hadc3);
 
-							g_ADCValue = MAX(g_ADCValue1, g_ADCValue3);
-							if (g_ADCValue1 > 0 || g_ADCValue3 > 0) {
-								sprintf(buffer, "ADC: %" PRIu32 "\t%" PRIu32 "\n", g_ADCValue1, g_ADCValue3);
-								printUsb(buffer);
-							}
+							if (adcMeasureCount < adcMaxMeasureCount) {
+								adc1sum = adc1sum + g_ADCValue1;
+								adc3sum = adc3sum + g_ADCValue3;
+								adcMeasureCount++;
+							} else {
 
-							if (g_ADCValue > g_ADCValue_threshold) {
-								sprintf(buffer, "ADC trigered: %" PRIu32 "%" PRIu32 "\n", g_ADCValue1, g_ADCValue3);
+								adc3Average = adc3sum / adcMeasureCount;
+								adc1Average = adc1sum / adcMeasureCount;
+								adc3sum = 0;
+								adc1sum = 0;
+								adcMeasureCount = 0;
+
+								char f1[10];
+								char f3[10];
+								ftoa(f1, adc1Average, 3);
+								ftoa(f3, adc3Average, 3);
+								sprintf(buffer, "ADC1: %s   ADC2:%s\n", f1, f3);
 								printUsb(buffer);
-								//slowStop();
-								resetPwm(i);
-								HAL_Delay(15000);
-								if (!emergencyStop) {
-									if (Setpoint1 > Input2) {
-										Setpoint1 = Input2 - 15;
-									} else {
-										Setpoint1 = Input2 + 15;
+
+								g_ADCValue = MAX(adc3Average, adc1Average);
+								if (g_ADCValue > g_ADCValue_threshold) {
+									printUsb("Triggered\n.");
+
+									fastStop();
+									resetPwm(i);
+									myDelay(15000000);
+									Output1_adj = 0;
+									Output2_adj = 0;
+									if (!emergencyStop) {
+										if (Setpoint1 > Input2) {
+											Setpoint1 = Input2 - 80;
+										} else {
+											Setpoint1 = Input2 + 80;
+										}
+										emergencyStop = true;
+										i_emergStop = i;
 									}
-									emergencyStop = true;
-									i_emergStop = i;
 								}
 							}
+
 						}
 					}
 				}
@@ -512,28 +537,20 @@ int main(void) {
 		}
 
 		if (previous_i != i) { // we are calculating output to motors each ms
-			// calculate adjusted pwm powers
-			//uint16_t* Output1_int = reinterpret_cast<uint16_t*>(&Output1);
-			//uint16_t Output1_int = (uint16_t)Output1;
+			int8_t sign1 = sign(Output1, Output1_adj);
+			Output1_adj = Output1_adj + sign1 * speedRamp;
+			int8_t sign2 = sign(Output2, Output2_adj);
+			Output2_adj = Output2_adj + sign2 * speedRamp;
 
-			int32_t o2, o1;
-//			if (inPidCorrection) { 			// for startup we use slow start - if user still holds key
-//				Output2_adj = (int32_t) Output2;
-//				Output1_adj = (int32_t) Output1;
-//			} else {  // if user doesn't hold UP/DOWN key we leave the PID to fix asap
-				int8_t sign1 = sign(Output1, Output1_adj);
-				Output1_adj = Output1_adj + sign1 * speedRamp;
-				int8_t sign2 = sign(Output2, Output2_adj);
-				Output2_adj = Output2_adj + sign2 * speedRamp;
-//			}
 			o2 = (int32_t) Output2_adj;
 			o1 = (int32_t) Output1_adj;
+
 			// output PWM
 			// MOTOR 2
 			if (o2 < 0.0) {
 				__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, 0);
 				__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, abs(o2));
-			} else if (o2 > 0.0) {
+			} else if (o2 >= 0.0) {
 				__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, abs(o2));
 				__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 0);
 			}
@@ -542,45 +559,51 @@ int main(void) {
 			if (o1 < 0.0) {
 				__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 0);
 				__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, abs(o1));
-			} else if (o1 > 0.0) {
+			} else if (o1 >= 0.0) {
 				__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, abs(o1));
 				__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
 			}
+
 		}
+
 	}
-
-	previous_i = i;
-
-	/* USER CODE END 3 */
-
 }
 
+/* USER CODE END 3 */
+
 void slowStop() {
-	while (round(abs(Output1)) > 2 || round(abs(Output2)) > 2) {
-		if (Output2 < 0.0) {
-			Output2 = Output2 + (round(abs(Output2) / 10) + 1);
+	while (round(abs(o1)) > 2 || round(abs(o2)) > 2) {
+		if (o2 < 0.0) {
+			o2 = o2 + (round(abs(o2) / 10) + 1);
 			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 0);
-			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, abs(Output2));
-		} else if (Output2 > 0.0) {
-			Output2 = Output2 - (round(abs(Output2) / 10) + 1);
+			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, abs(o2));
+		} else if (o2 > 0.0) {
+			o2 = o2 - (round(abs(o2) / 10) + 1);
 			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, 0);
-			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, abs(Output2));
+			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, abs(o2));
 		}
 
-		if (Output1 < 0.0) {
-			Output1 = Output1 + (round(abs(Output1) / 10) + 1);
+		if (o1 < 0.0) {
+			o1 = o1 + (round(abs(o1) / 10) + 1);
 			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
-			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, abs(Output1));
-		} else if (Output1 > 0.0) {
-			Output1 = Output1 - (round(abs(Output1) / 10) + 1);
+			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, abs(o1));
+		} else if (o1 > 0.0) {
+			o1 = o1 - (round(abs(o1) / 10) + 1);
 			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 0);
-			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, abs(Output1));
+			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, abs(o1));
 		}
 		// pause for 0.1 seconds.
 		HAL_Delay(100);
 		//myDelay(100000);
 	}
 	slowStopDone = true;
+}
+
+void fastStop() {
+	__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, 0);
+	__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 0);
+	__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 0);
+	__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
 }
 
 void buildAndSendBuffer() {
