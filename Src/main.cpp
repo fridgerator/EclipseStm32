@@ -68,6 +68,8 @@
 
 #include "PID_v1.h"
 
+#define SIXSECONDS (6*1000L) // three seconds are 3000 milliseconds
+#define ONESECONDS (1*1000L) // three seconds are 3000 milliseconds
 #define ADCCONVERTEDVALUES_BUFFER_SIZE ((uint32_t)  256)    /* Size of array containing ADC converted values */
 /* USER CODE END Includes */
 
@@ -102,6 +104,9 @@ uint32_t enc2Old;
 
 uint32_t tick1, tick2;
 
+uint8_t inposition1 = 0;
+uint8_t inposition2 = 0;
+
 uint32_t PWM_RES = 1000;
 float pwm1 = 0;
 float pwm2 = 0;
@@ -127,18 +132,21 @@ uint32_t received_data_size = 0;
 uint32_t receive_total;
 
 bool emergencyStop = false;
+uint32_t emergencyStopTimes = 0;
+uint32_t last6seconds;
+uint32_t last1seconds;
 bool prvic = false;
 bool slowStopDone = false;
 uint8_t previousButton = 0;
 bool inPidCorrection = false;
 
-float speedRamp = 0.1; // [increment of PWM / ms]
+float speedRamp = 0.2; // [increment of PWM / ms]
 
 // 4094 ... 3.3V
 // x    ... 1.6V
 // x = 1.6*4094/3.3 = 1984
 
-uint16_t g_ADCValue_threshold = 600;
+uint16_t g_ADCValue_threshold = 600; // max = 520mV  -> 0.520/3.3*4094=645.5
 uint16_t adcMaxMeasureCount = 10;
 uint16_t adcMeasureCount = 0;
 uint32_t adc3sum, adc1sum;
@@ -146,17 +154,22 @@ float adc3Average, adc1Average;
 
 //float aggKp = 110, aggKi = 60, aggKd = 1;
 //float aggKp = 70, aggKi = 3, aggKd = 0.2;
-float aggKp = 70, aggKi = 35, aggKd = 1;
+//float aggKp = 70, aggKi = 35, aggKd = 1;
 
-float Setpoint1 = 32768, Input1 = 32768, Output2;
-float Input2 = 32768, Output1;
+float aggKp = 70, aggKi = 40, aggKd = 1.5;
+
+float Setpoint1 = 32768;
+float Input1 = 32768;
+float Output2;
+float Input2 = 32768;
+float Output1;
 
 float Output2_adj;
 float Output1_adj;
 int32_t o2, o1;
 
-PID myPID2 = PID(&Input1, &Output2, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
-PID myPID1 = PID(&Input2, &Output1, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
+PID myPID2 = PID(&Input2, &Output2, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
+PID myPID1 = PID(&Input1, &Output1, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
 
 char *ftoa(char *a, double f, int precision);
 void buildAndSendBuffer();
@@ -403,8 +416,7 @@ int main(void) {
 		g_ADCValue3 = 0;
 
 		bool controlPower1 = true;
-		bool controlPower2 = false;
-		if (controlPower1 && !emergencyStop) {
+		if (controlPower1) {
 			HAL_ADC_Start(&hadc1);
 			if (HAL_ADC_PollForConversion(&hadc1, 100000) == HAL_OK) {
 				if ((HAL_ADC_GetState(&hadc1) & HAL_ADC_STATE_REG_EOC) == HAL_ADC_STATE_REG_EOC) {
@@ -426,20 +438,20 @@ int main(void) {
 								adc1sum = 0;
 								adcMeasureCount = 0;
 
-								char f1[10];
-								char f3[10];
-								ftoa(f1, adc1Average, 3);
-								ftoa(f3, adc3Average, 3);
-								sprintf(buffer, "ADC1: %s   ADC2:%s\n", f1, f3);
-								printUsb(buffer);
-
 								g_ADCValue = MAX(adc3Average, adc1Average);
 								if (g_ADCValue > g_ADCValue_threshold) {
-									printUsb("Triggered\n.");
+									emergencyStopTimes++;
+									printUsb("Triggered\n");
+									char f1[10];
+									char f3[10];
+									ftoa(f1, adc1Average, 3);
+									ftoa(f3, adc3Average, 3);
+									sprintf(buffer, "ADC1: %s   ADC2:%s\n", f1, f3);
+									printUsb(buffer);
 
 									fastStop();
 									resetPwm(i);
-									myDelay(15000000);
+									myDelay(4000000);
 									Output1_adj = 0;
 									Output2_adj = 0;
 									if (!emergencyStop) {
@@ -460,17 +472,44 @@ int main(void) {
 			}
 		}
 
-		if (controlPower2)
-			if (GPIO_PIN_RESET == HAL_GPIO_ReadPin(OCDA_GPIO_Port, OCDA_Pin) || GPIO_PIN_RESET == HAL_GPIO_ReadPin(OCDB_GPIO_Port, OCDB_Pin)) {
-				if (Setpoint1 > Input2) {
-					Setpoint1 = Input2 - 15;
-				} else {
-					Setpoint1 = Input2 + 15;
-				}
-				emergencyStop = true;
-				i_emergStop = i;
-				myDelay(50000);
+		if (HAL_GetTick() - last1seconds >= ONESECONDS) {
+			last1seconds += ONESECONDS; // remember the time
+			if (round(Setpoint1) == Input1) {
+				inposition1 = inposition1 + 1;
+			} else {
+				inposition1 = 0;
 			}
+			//lets check position if 2 times insamePosition than disable PID
+			if (inposition1 >= 2) {
+				myPID1.SetMode(MANUAL);
+				Output1 = 0;
+			}
+
+			if (round(Setpoint1) == Input2) {
+				inposition2 = inposition2 + 1;
+			} else {
+				inposition2 = 0;
+			}
+			if (inposition2 >= 2) {
+				myPID2.SetMode(MANUAL);
+				Output2 = 0;
+			}
+
+		}
+
+		if (HAL_GetTick() - last6seconds >= SIXSECONDS) {
+			last6seconds += SIXSECONDS; // remember the time
+			if (emergencyStopTimes >= 2) {
+				// over current happened 3 times.
+				// lets stop
+				fastStop();
+				myDelay(10000);
+				while (true) {
+					__WFI();
+				}
+			}
+			emergencyStopTimes = 0;
+		}
 
 		if (button1On == 0 && button2On == 0) {
 			previousButton = 0;
@@ -490,8 +529,8 @@ int main(void) {
 			}
 		}
 
-		Input1 = htim3.Instance->CNT;
-		Input2 = htim4.Instance->CNT;
+		Input1 = htim4.Instance->CNT;
+		Input2 = htim3.Instance->CNT;
 
 		if (inPidCorrection == false)
 			if (Input1 == Setpoint1)
@@ -504,9 +543,11 @@ int main(void) {
 			if (prvic == false && previousButton != 2) {
 				resetPwm(i);
 				prvic = true;
+				myPID1.SetMode(AUTOMATIC);
+				myPID2.SetMode(AUTOMATIC);
 			}
 			if (Setpoint1 < Input2 + 27) {
-				Setpoint1 = Setpoint1 + 1;
+				Setpoint1 = Setpoint1 + 0.005;
 			}
 			previousButton = 2;
 			iOfStandStill = 0;
@@ -519,9 +560,11 @@ int main(void) {
 			if (prvic == false && previousButton != 1) {
 				resetPwm(i);
 				prvic = true;
+				myPID1.SetMode(AUTOMATIC);
+				myPID2.SetMode(AUTOMATIC);
 			}
 			if (Setpoint1 > Input2 - 27) {
-				Setpoint1 = Setpoint1 - 1;
+				Setpoint1 = Setpoint1 - 0.005;
 			}
 			previousButton = 1;
 			iOfStandStill = 0;
@@ -563,7 +606,6 @@ int main(void) {
 				__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, abs(o1));
 				__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
 			}
-
 		}
 
 	}
