@@ -69,7 +69,7 @@
 #include "PID_v1.h"
 
 #define SIXSECONDS (6*1000L) // three seconds are 3000 milliseconds
-#define ONESECONDS (1*1000L) // three seconds are 3000 milliseconds
+#define THREESECONDS (3*1000L) // three seconds are 3000 milliseconds
 #define ADCCONVERTEDVALUES_BUFFER_SIZE ((uint32_t)  256)    /* Size of array containing ADC converted values */
 /* USER CODE END Includes */
 
@@ -472,29 +472,11 @@ int main(void) {
 			}
 		}
 
-		if (HAL_GetTick() - last1seconds >= ONESECONDS) {
-			last1seconds += ONESECONDS; // remember the time
-			if (round(Setpoint1) == Input1) {
-				inposition1 = inposition1 + 1;
-			} else {
-				inposition1 = 0;
-			}
-			//lets check position if 2 times insamePosition than disable PID
-			if (inposition1 >= 2) {
-				myPID1.SetMode(MANUAL);
-				Output1 = 0;
-			}
-
-			if (round(Setpoint1) == Input2) {
-				inposition2 = inposition2 + 1;
-			} else {
-				inposition2 = 0;
-			}
-			if (inposition2 >= 2) {
-				myPID2.SetMode(MANUAL);
-				Output2 = 0;
-			}
-
+		if (button1On == 0 && button2On == 0 && adc3Average < 100 && adc1Average < 100 && abs(Setpoint1 - Input1) < 3 && abs(Setpoint1 - Input2) < 3) {
+			myPID1.SetMode(MANUAL);
+			Output1 = 0;
+			myPID2.SetMode(MANUAL);
+			Output2 = 0;
 		}
 
 		if (HAL_GetTick() - last6seconds >= SIXSECONDS) {
@@ -546,8 +528,8 @@ int main(void) {
 				myPID1.SetMode(AUTOMATIC);
 				myPID2.SetMode(AUTOMATIC);
 			}
-			if (Setpoint1 < Input2 + 27) {
-				Setpoint1 = Setpoint1 + 0.005;
+			if (Setpoint1 < Input2 + 30) {
+				Setpoint1 = Setpoint1 + 0.007;
 			}
 			previousButton = 2;
 			iOfStandStill = 0;
@@ -563,8 +545,8 @@ int main(void) {
 				myPID1.SetMode(AUTOMATIC);
 				myPID2.SetMode(AUTOMATIC);
 			}
-			if (Setpoint1 > Input2 - 27) {
-				Setpoint1 = Setpoint1 - 0.005;
+			if (Setpoint1 > Input2 - 30) {
+				Setpoint1 = Setpoint1 - 0.007;
 			}
 			previousButton = 1;
 			iOfStandStill = 0;
