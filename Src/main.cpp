@@ -75,6 +75,9 @@
 
 /* Private variables ---------------------------------------------------------*/
 
+// for DFU update sample check ( Usb Firmware Update ):
+// c:\Users\klemen\STM32Cube\Repository\STM32Cube_FW_F3_V1.7.0\Projects\STM32303C_EVAL\Applications\USB_Device\DFU_Standalone\Src\main.c
+
 ADC_HandleTypeDef hadc1;
 ADC_HandleTypeDef hadc3;
 
