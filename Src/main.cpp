@@ -149,7 +149,7 @@ float speedRamp = 0.2; // [increment of PWM / ms]
 // x    ... 1.6V
 // x = 1.6*4094/3.3 = 1984
 
-uint16_t g_ADCValue_threshold = 600; // max = 520mV  -> 0.520/3.3*4094=645.5
+uint16_t g_ADCValue_threshold = 700; // max = 520mV  -> 0.520/3.3*4094=645.5
 uint16_t adcMaxMeasureCount = 10;
 uint16_t adcMeasureCount = 0;
 uint32_t adc3sum, adc1sum;
@@ -429,45 +429,46 @@ int main(void) {
 						if ((HAL_ADC_GetState(&hadc3) & HAL_ADC_STATE_REG_EOC) == HAL_ADC_STATE_REG_EOC) {
 							g_ADCValue3 = HAL_ADC_GetValue(&hadc3);
 
+/*
 							if (adcMeasureCount < adcMaxMeasureCount) {
 								adc1sum = adc1sum + g_ADCValue1;
 								adc3sum = adc3sum + g_ADCValue3;
 								adcMeasureCount++;
 							} else {
-
 								adc3Average = adc3sum / adcMeasureCount;
 								adc1Average = adc1sum / adcMeasureCount;
 								adc3sum = 0;
 								adc1sum = 0;
 								adcMeasureCount = 0;
+*/
 
-								g_ADCValue = MAX(adc3Average, adc1Average);
+								g_ADCValue = MAX(g_ADCValue3, g_ADCValue1);
 								if (g_ADCValue > g_ADCValue_threshold) {
 									emergencyStopTimes++;
 									printUsb("Triggered\n");
 									char f1[10];
 									char f3[10];
-									ftoa(f1, adc1Average, 3);
-									ftoa(f3, adc3Average, 3);
+									ftoa(f1, g_ADCValue3, 3);
+									ftoa(f3, g_ADCValue1, 3);
 									sprintf(buffer, "ADC1: %s   ADC2:%s\n", f1, f3);
 									printUsb(buffer);
 
 									fastStop();
 									resetPwm(i);
-									myDelay(4000000);
+									myDelay(5000000);
 									Output1_adj = 0;
 									Output2_adj = 0;
 									if (!emergencyStop) {
 										if (Setpoint1 > Input2) {
-											Setpoint1 = Input2 - 80;
+											Setpoint1 = Input2 - 30;
 										} else {
-											Setpoint1 = Input2 + 80;
+											Setpoint1 = Input2 + 30;
 										}
 										emergencyStop = true;
 										i_emergStop = i;
 									}
 								}
-							}
+//							}
 
 						}
 					}
@@ -559,7 +560,7 @@ int main(void) {
 		myPID1.Compute();
 		myPID2.Compute();
 
-		if (i % 300 == 0) {  // print reasults over usb every 300ms
+		if (i % 50 == 0) {  // print reasults over usb every 300ms
 			SerialReceive();
 			buildAndSendBuffer();
 		}
@@ -1180,6 +1181,13 @@ static void MX_GPIO_Init(void) {
 	GPIO_InitStruct.Pull = GPIO_NOPULL;
 	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
 	HAL_GPIO_Init(INH2_GPIO_Port, &GPIO_InitStruct);
+
+	/*Configure GPIO pin : LED_Pin */
+	GPIO_InitStruct.Pin = LED_Pin;
+	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+	GPIO_InitStruct.Pull = GPIO_NOPULL;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+	HAL_GPIO_Init(LED_GPIO_Port, &GPIO_InitStruct);
 
 	/*Configure GPIO pins : Button1_Pin Button2_Pin */
 	GPIO_InitStruct.Pin = Button1_Pin | Button2_Pin;

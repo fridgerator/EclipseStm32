@@ -67,6 +67,8 @@
 #define PWM4_GPIO_Port GPIOB
 #define INH2_Pin GPIO_PIN_11
 #define INH2_GPIO_Port GPIOB
+#define LED_Pin GPIO_PIN_8
+#define LED_GPIO_Port GPIOA
 #define PWM2_Pin GPIO_PIN_14
 #define PWM2_GPIO_Port GPIOB
 #define Button1_Pin GPIO_PIN_9
