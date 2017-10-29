@@ -4,7 +4,7 @@
  * Description        : Main program body
  ******************************************************************************
  *
- * Copyright (c) 2017 STMicroelectronics International N.V.
+ * Copyright (c) Klemen Živkovič, Župančičeva 34, Grosuplje Slovenia
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -182,7 +182,7 @@ void fastStop();
 
 /* Private variables ---------------------------------------------------------*/
 
-//prescaler 72000000/(PWM frequency*PWM resolution) � 1
+//prescaler 72000000/(PWM frequency*PWM resolution) – 1
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -560,7 +560,7 @@ int main(void) {
 		myPID1.Compute();
 		myPID2.Compute();
 
-		if (i % 50 == 0) {  // print reasults over usb every 300ms
+		if (i % 300 == 0) {  // print reasults over usb every 300ms
 			SerialReceive();
 			buildAndSendBuffer();
 		}
