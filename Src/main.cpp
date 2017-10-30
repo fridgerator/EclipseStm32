@@ -144,7 +144,7 @@ bool slowStopDone = false;
 uint8_t previousButton = 0;
 bool inPidCorrection = false;
 
-float speedRamp = 0.05; // [increment of PWM / ms]
+float speedRamp = 0.2; // [increment of PWM / ms]
 
 // 4094 ... 3.3V
 // x    ... 1.6V
@@ -159,8 +159,9 @@ float adc3Average, adc1Average;
 //float aggKp = 110, aggKi = 60, aggKd = 1;
 //float aggKp = 70, aggKi = 3, aggKd = 0.2;
 //float aggKp = 70, aggKi = 35, aggKd = 1;
+//float aggKp = 70, aggKi = 40, aggKd = 1.5;
 
-float aggKp = 70, aggKi = 40, aggKd = 1.5;
+float aggKp = 70, aggKi = 50, aggKd = 3;
 
 float Setpoint1 = 32768;
 float Input1 = 32768;
@@ -579,8 +580,12 @@ int main(void) {
 			buildAndSendBuffer();
 		}
 
-		Output1_adj = Output1 + posDelta * 20;
-		Output2_adj = Output2 - posDelta * 20;
+		int8_t sign1 = sign(Output1 + posDelta * 20, Output1_adj);
+		Output1_adj = Output1_adj + sign1 * speedRamp;
+
+		int8_t sign2 = sign(Output2 - posDelta * 20, Output2_adj);
+		Output2_adj = Output2_adj + sign2 * speedRamp;
+
 
 		if (Output1 < 0)
 			if (Output1_adj < -1000)
