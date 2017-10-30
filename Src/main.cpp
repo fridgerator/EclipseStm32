@@ -77,7 +77,6 @@
 
 // for DFU update sample check ( Usb Firmware Update ):
 // c:\Users\klemen\STM32Cube\Repository\STM32Cube_FW_F3_V1.7.0\Projects\STM32303C_EVAL\Applications\USB_Device\DFU_Standalone\Src\main.c
-
 ADC_HandleTypeDef hadc1;
 ADC_HandleTypeDef hadc3;
 
@@ -97,6 +96,8 @@ uint32_t alreadyResetted = 0;
 
 uint32_t g_ADCValue1 = 0;
 uint32_t g_ADCValue3 = 0;
+
+long inPosition1, inPosition2;
 
 float g_ADCValue = 0;
 
@@ -143,7 +144,7 @@ bool slowStopDone = false;
 uint8_t previousButton = 0;
 bool inPidCorrection = false;
 
-float speedRamp = 0.2; // [increment of PWM / ms]
+float speedRamp = 0.05; // [increment of PWM / ms]
 
 // 4094 ... 3.3V
 // x    ... 1.6V
@@ -173,6 +174,8 @@ int32_t o2, o1;
 
 PID myPID2 = PID(&Input2, &Output2, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
 PID myPID1 = PID(&Input1, &Output1, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
+
+int posDelta;
 
 char *ftoa(char *a, double f, int precision);
 void buildAndSendBuffer();
@@ -360,9 +363,9 @@ int main(void) {
 	__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 0);
 
 	myPID2.SetMode(AUTOMATIC);
-	myPID2.SetOutputLimits(-1000.0, 1000.0);
+	myPID2.SetOutputLimits(-850.0, 850.0);
 	myPID1.SetMode(AUTOMATIC);
-	myPID1.SetOutputLimits(-1000.0, 1000.0);
+	myPID1.SetOutputLimits(-850.0, 850.0);
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
@@ -429,58 +432,51 @@ int main(void) {
 						if ((HAL_ADC_GetState(&hadc3) & HAL_ADC_STATE_REG_EOC) == HAL_ADC_STATE_REG_EOC) {
 							g_ADCValue3 = HAL_ADC_GetValue(&hadc3);
 
-/*
-							if (adcMeasureCount < adcMaxMeasureCount) {
-								adc1sum = adc1sum + g_ADCValue1;
-								adc3sum = adc3sum + g_ADCValue3;
-								adcMeasureCount++;
-							} else {
-								adc3Average = adc3sum / adcMeasureCount;
-								adc1Average = adc1sum / adcMeasureCount;
-								adc3sum = 0;
-								adc1sum = 0;
-								adcMeasureCount = 0;
-*/
+							/*
+							 if (adcMeasureCount < adcMaxMeasureCount) {
+							 adc1sum = adc1sum + g_ADCValue1;
+							 adc3sum = adc3sum + g_ADCValue3;
+							 adcMeasureCount++;
+							 } else {
+							 adc3Average = adc3sum / adcMeasureCount;
+							 adc1Average = adc1sum / adcMeasureCount;
+							 adc3sum = 0;
+							 adc1sum = 0;
+							 adcMeasureCount = 0;
+							 */
 
-								g_ADCValue = MAX(g_ADCValue3, g_ADCValue1);
-								if (g_ADCValue > g_ADCValue_threshold) {
-									emergencyStopTimes++;
-									printUsb("Triggered\n");
-									char f1[10];
-									char f3[10];
-									ftoa(f1, g_ADCValue3, 3);
-									ftoa(f3, g_ADCValue1, 3);
-									sprintf(buffer, "ADC1: %s   ADC2:%s\n", f1, f3);
-									printUsb(buffer);
+							g_ADCValue = MAX(g_ADCValue3, g_ADCValue1);
+							if (g_ADCValue > g_ADCValue_threshold) {
+								emergencyStopTimes++;
+								printUsb("Triggered\n");
+								char f1[10];
+								char f3[10];
+								ftoa(f1, g_ADCValue3, 3);
+								ftoa(f3, g_ADCValue1, 3);
+								sprintf(buffer, "ADC1: %s   ADC2:%s\n", f1, f3);
+								printUsb(buffer);
 
-									fastStop();
-									resetPwm(i);
-									myDelay(5000000);
-									Output1_adj = 0;
-									Output2_adj = 0;
-									if (!emergencyStop) {
-										if (Setpoint1 > Input2) {
-											Setpoint1 = Input2 - 30;
-										} else {
-											Setpoint1 = Input2 + 30;
-										}
-										emergencyStop = true;
-										i_emergStop = i;
+								fastStop();
+								resetPwm(i);
+								myDelay(5000000);
+								Output1_adj = 0;
+								Output2_adj = 0;
+								if (!emergencyStop) {
+									if (Setpoint1 > Input2) {
+										Setpoint1 = Input2 - 30;
+									} else {
+										Setpoint1 = Input2 + 30;
 									}
+									emergencyStop = true;
+									i_emergStop = i;
 								}
+							}
 //							}
 
 						}
 					}
 				}
 			}
-		}
-
-		if (button1On == 0 && button2On == 0 && adc3Average < 100 && adc1Average < 100 && abs(Setpoint1 - Input1) < 3 && abs(Setpoint1 - Input2) < 3) {
-			myPID1.SetMode(MANUAL);
-			Output1 = 0;
-			myPID2.SetMode(MANUAL);
-			Output2 = 0;
 		}
 
 		if (HAL_GetTick() - last6seconds >= SIXSECONDS) {
@@ -498,6 +494,19 @@ int main(void) {
 		}
 
 		if (button1On == 0 && button2On == 0) {
+			if (abs(Setpoint1 - Input1) < 2)
+				inPosition1++;
+			if (abs(Setpoint1 - Input2) < 2)
+				inPosition2++;
+			if (myPID1.GetMode() == AUTOMATIC && inPosition1 > 100000) {
+				myPID1.SetMode(MANUAL);
+				Output1 = 0;
+			}
+			if (myPID2.GetMode() == AUTOMATIC && inPosition2 > 100000) {
+				myPID2.SetMode(MANUAL);
+				Output2 = 0;
+			}
+
 			previousButton = 0;
 			prvic = false;
 			if (iOfStandStill == 0)
@@ -531,10 +540,12 @@ int main(void) {
 				prvic = true;
 				myPID1.SetMode(AUTOMATIC);
 				myPID2.SetMode(AUTOMATIC);
+				inPosition1 = 0;
+				inPosition2 = 0;
 			}
-			if (Setpoint1 < Input2 + 30) {
-				Setpoint1 = Setpoint1 + 0.007;
-			}
+			//if (Setpoint1 < Input2 + 40) {
+			Setpoint1 = Setpoint1 + 0.008;
+			//}
 			previousButton = 2;
 			iOfStandStill = 0;
 		}
@@ -548,10 +559,12 @@ int main(void) {
 				prvic = true;
 				myPID1.SetMode(AUTOMATIC);
 				myPID2.SetMode(AUTOMATIC);
+				inPosition1 = 0;
+				inPosition2 = 0;
 			}
-			if (Setpoint1 > Input2 - 30) {
-				Setpoint1 = Setpoint1 - 0.007;
-			}
+			//if (Setpoint1 > Input2 - 40) {
+			Setpoint1 = Setpoint1 - 0.008;
+			//}
 			previousButton = 1;
 			iOfStandStill = 0;
 		}
@@ -560,38 +573,51 @@ int main(void) {
 		myPID1.Compute();
 		myPID2.Compute();
 
+		posDelta = static_cast<int>(round(Input2 - Input1));
 		if (i % 300 == 0) {  // print reasults over usb every 300ms
 			SerialReceive();
 			buildAndSendBuffer();
 		}
 
-		if (previous_i != i) { // we are calculating output to motors each ms
-			int8_t sign1 = sign(Output1, Output1_adj);
-			Output1_adj = Output1_adj + sign1 * speedRamp;
-			int8_t sign2 = sign(Output2, Output2_adj);
-			Output2_adj = Output2_adj + sign2 * speedRamp;
+		Output1_adj = Output1 + posDelta * 20;
+		Output2_adj = Output2 - posDelta * 20;
 
-			o2 = (int32_t) Output2_adj;
-			o1 = (int32_t) Output1_adj;
+		if (Output1 < 0)
+			if (Output1_adj < -1000)
+				Output1_adj = -1000;
+		if (Output1 > 0)
+			if (Output1_adj > 1000)
+				Output1_adj = 1000;
 
-			// output PWM
-			// MOTOR 2
-			if (o2 < 0.0) {
-				__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, 0);
-				__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, abs(o2));
-			} else if (o2 >= 0.0) {
-				__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, abs(o2));
-				__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 0);
-			}
+		if (Output2 < 0)
+			if (Output2_adj < -1000)
+				Output2_adj = -1000;
+		if (Output2 > 0)
+			if (Output2_adj > 1000)
+				Output2_adj = 1000;
 
-			// MOTOR 1
-			if (o1 < 0.0) {
-				__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 0);
-				__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, abs(o1));
-			} else if (o1 >= 0.0) {
-				__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, abs(o1));
-				__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
-			}
+		o2 = (int32_t) Output2_adj;
+		o1 = (int32_t) Output1_adj;
+		//o2 = (int32_t) Output2;
+		//o1 = (int32_t) Output1;
+
+		// output PWM
+		// MOTOR 2
+		if (o2 < 0.0) {
+			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, 0);
+			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, abs(o2));
+		} else if (o2 >= 0.0) {
+			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, abs(o2));
+			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 0);
+		}
+
+		// MOTOR 1
+		if (o1 < 0.0) {
+			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 0);
+			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, abs(o1));
+		} else if (o1 >= 0.0) {
+			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, abs(o1));
+			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
 		}
 
 	}
@@ -676,6 +702,12 @@ void buildAndSendBuffer() {
 	char buf1[4] = "";
 	itoa(g_ADCValue, buf1, 10);
 	strcat(buffer, buf1);
+
+	strcat(buffer, " ");
+
+	char buf2[4] = "";
+	itoa(posDelta, buf2, 10);
+	strcat(buffer, buf2);
 
 	strcat(buffer, "\n");
 
