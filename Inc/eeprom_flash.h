@@ -137,5 +137,6 @@
 /* Exported functions ------------------------------------------------------- */
 void writeFlash(void);
 uint32_t readFlash(uint32_t offset);
+void writeFlash(uint32_t offset, uint32_t data);
 
 #endif

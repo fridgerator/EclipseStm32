@@ -148,7 +148,6 @@ void writeFlash(void) {
 				__WFI();
 			}
 		}
-		CLEAR_BIT(FLASH->CR, (FLASH_CR_PER));
 
 		/* FLASH Word program of DATA_32 at addresses defined by FLASH_USER_START_ADDR and FLASH_USER_END_ADDR */
 		Address = FLASH_USER_START_ADDR;
@@ -163,7 +162,6 @@ void writeFlash(void) {
 					__WFI();
 				}
 			}
-			CLEAR_BIT(FLASH->CR, (FLASH_CR_PG));
 		}
 
 		/* Check the correctness of written data */
@@ -216,8 +214,66 @@ void writeFlash(void) {
 }
 
 uint32_t readFlash(uint32_t offset) {
-	uint32_t Address = FLASH_USER_START_ADDR;
-	uint32_t value = (*(__IO uint32_t*) (Address + offset * 4));
+	uint32_t Address = FLASH_USER_START_ADDR + offset * 4;
+	uint32_t value = (*(__IO uint32_t*) Address);
 	return value;
+}
+
+void writeFlash(uint32_t offset, uint32_t data) {
+	HAL_FLASH_Unlock();
+	HAL_FLASH_OB_Unlock();
+	HAL_FLASHEx_OBGetConfig(&OptionsBytesStruct);
+
+	/* Check if desired pages are already write protected ***********************/
+	if ((OptionsBytesStruct.WRPPage & FLASH_PAGE_TO_BE_PROTECTED) != FLASH_PAGE_TO_BE_PROTECTED) {
+		/* Restore write protected pages */
+		OptionsBytesStruct.OptionType = OPTIONBYTE_WRP;
+		OptionsBytesStruct.WRPState = OB_WRPSTATE_DISABLE;
+		OptionsBytesStruct.WRPPage = FLASH_PAGE_TO_BE_PROTECTED;
+		if (HAL_FLASHEx_OBProgram(&OptionsBytesStruct) != HAL_OK) {
+			/* Error occurred while options bytes programming. **********************/
+			while (1) {
+				__WFI();
+			}
+		}
+
+		/* Generate System Reset to load the new option byte values ***************/
+		HAL_FLASH_OB_Launch();
+	}
+
+	uint32_t Address = FLASH_USER_START_ADDR + offset * 4;
+	HAL_StatusTypeDef result = HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, Address, data);
+
+	HAL_FLASH_OB_Lock();
+
+	/* The selected pages are not write protected *******************************/
+	if ((OptionsBytesStruct.WRPPage & FLASH_PAGE_TO_BE_PROTECTED) != 0x00) {
+		/* Fill EraseInit structure************************************************/
+		EraseInitStruct.TypeErase = FLASH_TYPEERASE_PAGES;
+		EraseInitStruct.PageAddress = FLASH_USER_START_ADDR;
+		EraseInitStruct.NbPages = (FLASH_USER_END_ADDR - FLASH_USER_START_ADDR) / FLASH_PAGE_SIZE;
+
+		if (HAL_FLASHEx_Erase(&EraseInitStruct, &PageError) != HAL_OK) {
+			/*
+			 Error occurred while page erase.
+			 User can add here some code to deal with this error.
+			 PageError will contain the faulty page and then to know the code error on this page,
+			 user can call function 'HAL_FLASH_GetError()'
+			 */
+			while (1) {
+				__WFI();
+			}
+		}
+
+		/* FLASH Word program of DATA_32 at addresses defined by FLASH_USER_START_ADDR and FLASH_USER_END_ADDR */
+		Address = FLASH_USER_START_ADDR + offset * 4;
+		HAL_StatusTypeDef result = HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, Address, data);
+		if (result != HAL_OK) {
+			while (1) {
+				__WFI();
+			}
+		}
+	}
+
 }
 

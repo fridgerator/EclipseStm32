@@ -58,6 +58,7 @@
 #include <stm32f3xx_hal_rcc_ex.h>
 #include <stm32f3xx_hal_tim.h>
 #include <stm32f3xx_hal_tim_ex.h>
+
 #include <usb_device.h>
 #include <usbd_cdc.h>
 #include <usbd_def.h>
@@ -319,6 +320,51 @@ void resetPwm(uint32_t i) {
 	alreadyResetted = 1;
 }
 
+/**
+  * @brief  Writes a data in a specified RTC Backup data register.
+  * @param  RTC_BKP_DR: RTC Backup data Register number.
+  *   This parameter can be: RTC_BKP_DRx where x can be from 0 to 19 to
+  *                          specify the register.
+  * @param  Data: Data to be written in the specified RTC Backup data register.
+  * @retval None
+  */
+void RTC_WriteBackupRegister(uint32_t RTC_BKP_DR, uint32_t Data)
+{
+  __IO uint32_t tmp = 0;
+
+  /* Check the parameters */
+  assert_param(IS_RTC_BKP(RTC_BKP_DR));
+
+  tmp = RTC_BASE + 0x50;
+  tmp += (RTC_BKP_DR * 4);
+
+  /* Write the specified register */
+  *(__IO uint32_t *)tmp = (uint32_t)Data;
+  //RTC->BKP0R = Data;
+}
+
+/**
+  * @brief  Reads data from the specified RTC Backup data Register.
+  * @param  RTC_BKP_DR: RTC Backup data Register number.
+  *   This parameter can be: RTC_BKP_DRx where x can be from 0 to 19 to
+  *                          specify the register.
+  * @retval None
+  */
+uint32_t RTC_ReadBackupRegister(uint32_t RTC_BKP_DR)
+{
+  __IO uint32_t tmp = 0;
+
+  /* Check the parameters */
+  assert_param(IS_RTC_BKP(RTC_BKP_DR));
+
+  tmp = RTC_BASE + 0x50;
+  tmp += (RTC_BKP_DR * 4);
+
+  /* Read the specified register */
+  return (*(__IO uint32_t *)tmp);
+}
+
+
 int main(void) {
 //	myPID1.SetControllerDirection(REVERSE);
 //	myPID2.SetControllerDirection(DIRECT);
@@ -373,11 +419,12 @@ int main(void) {
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
 
-	writeFlash();
-	uint32_t value = readFlash(0);
+	//writeFlash();
 
-
-
+	// write to flash is possible like this:
+	//uint32_t value = readFlash(0);
+	//writeFlash(0, value+1);
+	//but better use RTC backup registers (16 32bit available on stm32f3)
 
 	uint32_t i = 0;
 	uint32_t previous_i = 0;
@@ -585,6 +632,9 @@ int main(void) {
 		if (i % 300 == 0) {  // print reasults over usb every 300ms
 			SerialReceive();
 			buildAndSendBuffer();
+			//char buffer1[20] = { "" };
+			//sprintf(buffer1, "\n\rflash value: %lu\n\r", value);
+			//printUsb(buffer1);
 		}
 
 		int8_t sign1 = sign(Output1 + posDelta * 20, Output1_adj);
