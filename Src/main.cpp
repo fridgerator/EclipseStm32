@@ -65,6 +65,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <inttypes.h>
+#include <eeprom_flash.h>
 
 #include "PID_v1.h"
 
@@ -371,6 +372,12 @@ int main(void) {
 
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
+
+	writeFlash();
+	uint32_t value = readFlash(0);
+
+
+
 
 	uint32_t i = 0;
 	uint32_t previous_i = 0;
