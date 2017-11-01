@@ -90,6 +90,8 @@ TIM_HandleTypeDef htim8;
 /* USER CODE BEGIN PV */
 volatile uint8_t button1On = 0;
 volatile uint8_t button2On = 0;
+volatile uint8_t ocda = 0;
+volatile uint8_t ocdb = 0;
 
 uint32_t button2Count = 0;
 uint32_t button1Count = 0;
@@ -146,7 +148,7 @@ bool slowStopDone = false;
 uint8_t previousButton = 0;
 bool inPidCorrection = false;
 
-float speedRamp = 0.2; // [increment of PWM / ms]
+float speedRamp = 0.10; // [increment of PWM / ms]
 
 // 4094 ... 3.3V
 // x    ... 1.6V
@@ -163,7 +165,7 @@ float adc3Average, adc1Average;
 //float aggKp = 70, aggKi = 35, aggKd = 1;
 //float aggKp = 70, aggKi = 40, aggKd = 1.5;
 
-float aggKp = 70, aggKi = 50, aggKd = 3;
+float aggKp = 60, aggKi = 40, aggKd = 1.5;
 
 float Setpoint1 = 32768;
 float Input1 = 32768;
@@ -175,8 +177,8 @@ float Output2_adj;
 float Output1_adj;
 int32_t o2, o1;
 
-PID myPID2 = PID(&Input2, &Output2, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
-PID myPID1 = PID(&Input1, &Output1, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
+PID1 myPID2 = PID1(&Input2, &Output2, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
+PID1 myPID1 = PID1(&Input1, &Output1, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
 
 int posDelta;
 
@@ -321,49 +323,46 @@ void resetPwm(uint32_t i) {
 }
 
 /**
-  * @brief  Writes a data in a specified RTC Backup data register.
-  * @param  RTC_BKP_DR: RTC Backup data Register number.
-  *   This parameter can be: RTC_BKP_DRx where x can be from 0 to 19 to
-  *                          specify the register.
-  * @param  Data: Data to be written in the specified RTC Backup data register.
-  * @retval None
-  */
-void RTC_WriteBackupRegister(uint32_t RTC_BKP_DR, uint32_t Data)
-{
-  __IO uint32_t tmp = 0;
+ * @brief  Writes a data in a specified RTC Backup data register.
+ * @param  RTC_BKP_DR: RTC Backup data Register number.
+ *   This parameter can be: RTC_BKP_DRx where x can be from 0 to 19 to
+ *                          specify the register.
+ * @param  Data: Data to be written in the specified RTC Backup data register.
+ * @retval None
+ */
+void RTC_WriteBackupRegister(uint32_t RTC_BKP_DR, uint32_t Data) {
+	__IO uint32_t tmp = 0;
 
-  /* Check the parameters */
-  assert_param(IS_RTC_BKP(RTC_BKP_DR));
+	/* Check the parameters */
+	assert_param(IS_RTC_BKP(RTC_BKP_DR));
 
-  tmp = RTC_BASE + 0x50;
-  tmp += (RTC_BKP_DR * 4);
+	tmp = RTC_BASE + 0x50;
+	tmp += (RTC_BKP_DR * 4);
 
-  /* Write the specified register */
-  *(__IO uint32_t *)tmp = (uint32_t)Data;
-  //RTC->BKP0R = Data;
+	/* Write the specified register */
+	*(__IO uint32_t *) tmp = (uint32_t) Data;
+	//RTC->BKP0R = Data;
 }
 
 /**
-  * @brief  Reads data from the specified RTC Backup data Register.
-  * @param  RTC_BKP_DR: RTC Backup data Register number.
-  *   This parameter can be: RTC_BKP_DRx where x can be from 0 to 19 to
-  *                          specify the register.
-  * @retval None
-  */
-uint32_t RTC_ReadBackupRegister(uint32_t RTC_BKP_DR)
-{
-  __IO uint32_t tmp = 0;
+ * @brief  Reads data from the specified RTC Backup data Register.
+ * @param  RTC_BKP_DR: RTC Backup data Register number.
+ *   This parameter can be: RTC_BKP_DRx where x can be from 0 to 19 to
+ *                          specify the register.
+ * @retval None
+ */
+uint32_t RTC_ReadBackupRegister(uint32_t RTC_BKP_DR) {
+	__IO uint32_t tmp = 0;
 
-  /* Check the parameters */
-  assert_param(IS_RTC_BKP(RTC_BKP_DR));
+	/* Check the parameters */
+	assert_param(IS_RTC_BKP(RTC_BKP_DR));
 
-  tmp = RTC_BASE + 0x50;
-  tmp += (RTC_BKP_DR * 4);
+	tmp = RTC_BASE + 0x50;
+	tmp += (RTC_BKP_DR * 4);
 
-  /* Read the specified register */
-  return (*(__IO uint32_t *)tmp);
+	/* Read the specified register */
+	return (*(__IO uint32_t *) tmp);
 }
-
 
 int main(void) {
 //	myPID1.SetControllerDirection(REVERSE);
@@ -414,20 +413,21 @@ int main(void) {
 	myPID2.SetOutputLimits(-850.0, 850.0);
 	myPID1.SetMode(AUTOMATIC);
 	myPID1.SetOutputLimits(-850.0, 850.0);
+
+	myPID1.SetAccelerationLimits(-0.5,0.5);
+	myPID2.SetAccelerationLimits(-0.5,0.5);
+
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
 
 	//writeFlash();
-
 	// write to flash is possible like this:
 	//uint32_t value = readFlash(0);
 	//writeFlash(0, value+1);
 	//but better use RTC backup registers (16 32bit available on stm32f3)
-
 	uint32_t i = 0;
-	uint32_t previous_i = 0;
 	uint32_t iOfStandStill = 1;
 	int32_t i_emergStop = 0;
 
@@ -629,7 +629,17 @@ int main(void) {
 		myPID2.Compute();
 
 		posDelta = static_cast<int>(round(Input2 - Input1));
-		if (i % 300 == 0) {  // print reasults over usb every 300ms
+		if (i % 100 == 0) {  // print reasults over usb every 300ms
+			if (HAL_GPIO_ReadPin(OCDA_GPIO_Port, OCDA_Pin) == GPIO_PIN_RESET)
+				ocda = 1;
+			else
+				ocda = 0;
+
+			if (HAL_GPIO_ReadPin(OCDB_GPIO_Port, OCDB_Pin) == GPIO_PIN_RESET)
+				ocdb = 1;
+			else
+				ocdb = 0;
+
 			SerialReceive();
 			buildAndSendBuffer();
 			//char buffer1[20] = { "" };
@@ -637,26 +647,23 @@ int main(void) {
 			//printUsb(buffer1);
 		}
 
-		int8_t sign1 = sign(Output1 + posDelta * 20, Output1_adj);
-		Output1_adj = Output1_adj + sign1 * speedRamp;
+		//int8_t sign1 = sign(Output1 + posDelta * 20, Output1_adj);
+		//Output1_adj = Output1_adj + sign1 * speedRamp;
+		Output1_adj = Output1 + posDelta * 20;
 
-		int8_t sign2 = sign(Output2 - posDelta * 20, Output2_adj);
-		Output2_adj = Output2_adj + sign2 * speedRamp;
+		//int8_t sign2 = sign(Output2 - posDelta * 20, Output2_adj);
+		//Output2_adj = Output2_adj + sign2 * speedRamp;
+		Output2_adj = Output2 - posDelta * 20;
 
+		if (Output1_adj < -1000)
+			Output1_adj = -1000;
+		if (Output1_adj > 1000)
+			Output1_adj = 1000;
 
-		if (Output1 < 0)
-			if (Output1_adj < -1000)
-				Output1_adj = -1000;
-		if (Output1 > 0)
-			if (Output1_adj > 1000)
-				Output1_adj = 1000;
-
-		if (Output2 < 0)
-			if (Output2_adj < -1000)
-				Output2_adj = -1000;
-		if (Output2 > 0)
-			if (Output2_adj > 1000)
-				Output2_adj = 1000;
+		if (Output2_adj < -1000)
+			Output2_adj = -1000;
+		if (Output2_adj > 1000)
+			Output2_adj = 1000;
 
 		o2 = (int32_t) Output2_adj;
 		o1 = (int32_t) Output1_adj;
@@ -770,6 +777,10 @@ void buildAndSendBuffer() {
 	char buf2[4] = "";
 	itoa(posDelta, buf2, 10);
 	strcat(buffer, buf2);
+
+	char buf3[10] = "";
+	sprintf(buf3, " %d %d", ocda, ocdb);
+	strcat(buffer, buf3);
 
 	strcat(buffer, "\n");
 
@@ -1288,6 +1299,12 @@ static void MX_GPIO_Init(void) {
 	GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
 	GPIO_InitStruct.Pull = GPIO_PULLUP;
 	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+	/*Configure GPIO pins : Button1_Pin Button2_Pin */
+	GPIO_InitStruct.Pin = OCDA_Pin | OCDB_Pin;
+	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+	GPIO_InitStruct.Pull = GPIO_NOPULL;
+	HAL_GPIO_Init(OCDA_GPIO_Port, &GPIO_InitStruct);
 
 }
 

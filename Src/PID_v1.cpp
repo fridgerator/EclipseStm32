@@ -7,13 +7,15 @@
 
 #include "main.h"
 #include "PID_v1.h"
+#include "stm32f303xc.h"
+#include "stm32f3xx_hal.h"
+#include <limits>
 
 /*Constructor (...)*********************************************************
  *    The parameters specified here are those for for which we can't set up 
  *    reliable defaults, so we need to have the user set them.
  ***************************************************************************/
-PID::PID(float* Input, float* Output, float* Setpoint, float Kp, float Ki,
-		float Kd, int ControllerDirection) {
+PID1::PID1(float* Input, float* Output, float* Setpoint, float Kp, float Ki, float Kd, int ControllerDirection) {
 
 	myOutput = Output;
 	myInput = Input;
@@ -21,10 +23,13 @@ PID::PID(float* Input, float* Output, float* Setpoint, float Kp, float Ki,
 	inAuto = false;
 
 	SampleTime = 1;											//default Controller Sample Time is 0.1 seconds
-	PID::SetOutputLimits(0, 255);				//default output limit corresponds to pwm limits
+	PID1::SetOutputLimits(0, 255);				//default output limit corresponds to pwm limits
+	this->SetAccelerationLimits(std::numeric_limits<float>::min(), std::numeric_limits<float>::max());
+	lastEncoderPosition = *myInput;
+	timeOfPrevEnc = HAL_GetTick();
 
-	PID::SetControllerDirection(ControllerDirection);
-	PID::SetTunings(Kp, Ki, Kd);
+	PID1::SetControllerDirection(ControllerDirection);
+	PID1::SetTunings(Kp, Ki, Kd);
 
 	lastTime = HAL_GetTick() - SampleTime;
 }
@@ -35,7 +40,7 @@ PID::PID(float* Input, float* Output, float* Setpoint, float Kp, float Ki,
  *   pid Output needs to be computed.  returns true when the output is computed,
  *   false when nothing has been done.
  **********************************************************************************/
-bool PID::Compute() {
+bool PID1::Compute() {
 	if (!inAuto)
 		return false;
 	unsigned long now = HAL_GetTick();
@@ -44,7 +49,6 @@ bool PID::Compute() {
 		/*Compute all the working error variables*/
 		//sprintf(buffer, "%lu timeChange: %lu\n\r", now, timeChange);
 		//printUsb(buffer);
-
 		float input = *myInput;
 		float error = *mySetpoint - input;
 		ITerm += (ki * error);
@@ -57,15 +61,37 @@ bool PID::Compute() {
 		/*Compute PID Output*/
 		float output = kp * error + ITerm - kd * dInput;
 
-		if (output > outMax)
-			output = outMax;
-		else if (output < outMin)
-			output = outMin;
+
+		//lets calculate speed change
+		/*
+		if (input != lastEncoderPosition) {
+			this->speed = (input - lastEncoderPosition) / (now - timeOfPrevEnc);
+			this->acceleration = (this->speed - this->prevSpeed) / timeChange;
+
+			if (this->acceleration > this->maxAccel)
+				output = prevOutput;
+			if (this->acceleration < this->minAccel)
+				output = prevOutput;
+
+			if (output > outMax)
+				output = outMax;
+			else if (output < outMin)
+				output = outMin;
+
+			this->lastEncoderPosition = input;
+			this->timeOfPrevEnc = now;
+			this->prevSpeed = speed;
+		} else {
+
+		}
+		*/
 		*myOutput = output;
 
 		/*Remember some variables for next time*/
 		this->lastInput = input;
 		this->lastTime = now;
+		this->prevOutput = output;
+
 		return true;
 
 	} else
@@ -77,7 +103,7 @@ bool PID::Compute() {
  * it's called automatically from the constructor, but tunings can also
  * be adjusted on the fly during normal operation
  ******************************************************************************/
-void PID::SetTunings(float Kp, float Ki, float Kd) {
+void PID1::SetTunings(float Kp, float Ki, float Kd) {
 	if (Kp < 0 || Ki < 0 || Kd < 0)
 		return;
 
@@ -100,7 +126,7 @@ void PID::SetTunings(float Kp, float Ki, float Kd) {
 /* SetSampleTime(...) *********************************************************
  * sets the period, in Milliseconds, at which the calculation is performed	
  ******************************************************************************/
-void PID::SetSampleTime(int NewSampleTime) {
+void PID1::SetSampleTime(int NewSampleTime) {
 	if (NewSampleTime > 0) {
 		float ratio = (float) NewSampleTime / (float) SampleTime;
 		ki *= ratio;
@@ -117,7 +143,7 @@ void PID::SetSampleTime(int NewSampleTime) {
  *  want to clamp it from 0-125.  who knows.  at any rate, that can all be done
  *  here.
  **************************************************************************/
-void PID::SetOutputLimits(float Min, float Max) {
+void PID1::SetOutputLimits(float Min, float Max) {
 	if (Min >= Max)
 		return;
 	outMin = Min;
@@ -136,15 +162,20 @@ void PID::SetOutputLimits(float Min, float Max) {
 	}
 }
 
+void PID1::SetAccelerationLimits(float minAccel, float maxAccel) {
+	this->minAccel = minAccel;
+	this->maxAccel = maxAccel;
+}
+
 /* SetMode(...)****************************************************************
  * Allows the controller Mode to be set to manual (0) or Automatic (non-zero)
  * when the transition from manual to auto occurs, the controller is
  * automatically initialized
  ******************************************************************************/
-void PID::SetMode(int Mode) {
+void PID1::SetMode(int Mode) {
 	bool newAuto = (Mode == AUTOMATIC);
 	if (newAuto == !inAuto) { /*we just went from manual to auto*/
-		PID::Initialize();
+		PID1::Initialize();
 	}
 	inAuto = newAuto;
 }
@@ -153,7 +184,7 @@ void PID::SetMode(int Mode) {
  *	does all the things that need to happen to ensure a bumpless transfer
  *  from manual to automatic mode.
  ******************************************************************************/
-void PID::Initialize() {
+void PID1::Initialize() {
 	ITerm = *myOutput;
 	lastInput = *myInput;
 	if (ITerm > outMax)
@@ -168,7 +199,7 @@ void PID::Initialize() {
  * know which one, because otherwise we may increase the output when we should
  * be decreasing.  This is called from the constructor.
  ******************************************************************************/
-void PID::SetControllerDirection(int Direction) {
+void PID1::SetControllerDirection(int Direction) {
 	if (inAuto && Direction != controllerDirection) {
 		kp = (0 - kp);
 		ki = (0 - ki);
@@ -182,19 +213,42 @@ void PID::SetControllerDirection(int Direction) {
  * functions query the internal state of the PID.  they're here for display 
  * purposes.  this are the functions the PID Front-end uses for example
  ******************************************************************************/
-float PID::GetKp() {
+float PID1::GetKp() {
 	return dispKp;
 }
-float PID::GetKi() {
+float PID1::GetKi() {
 	return dispKi;
 }
-float PID::GetKd() {
+float PID1::GetKd() {
 	return dispKd;
 }
-int PID::GetMode() {
+int PID1::GetMode() {
 	return inAuto ? AUTOMATIC : MANUAL;
 }
-int PID::GetDirection() {
+int PID1::GetDirection() {
 	return controllerDirection;
 }
 
+void DWT_Init(void) {
+	if (!(CoreDebug->DEMCR & CoreDebug_DEMCR_TRCENA_Msk)) {
+		CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+		DWT->CYCCNT = 0;
+		DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+	}
+}
+
+uint32_t DWT_Get(void) {
+	return DWT->CYCCNT;
+}
+
+__inline
+uint8_t DWT_Compare(int32_t tp) {
+	return (((int32_t) DWT_Get() - tp) < 0);
+}
+
+void DWT_Delay(uint32_t us) // microseconds
+		{
+	int32_t tp = DWT_Get() + us * (SystemCoreClock / 1000000);
+	while (DWT_Compare(tp))
+		;
+}

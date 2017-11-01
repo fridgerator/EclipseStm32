@@ -40,11 +40,8 @@
 
 extern uint32_t button1On;
 extern uint32_t button2On;
-
-extern uint32_t g_ADCValue1;
-extern uint32_t g_ADCValue3;
-extern ADC_HandleTypeDef hadc1;
-extern ADC_HandleTypeDef hadc3;
+extern uint32_t ocda;
+extern uint32_t ocdb;
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	if (GPIO_Pin == Button1_Pin) {
@@ -60,6 +57,20 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 			button2On = 1;
 		} else {
 			button2On = 0;
+		}
+	} else if (GPIO_Pin == OCDA_Pin) {
+		if (HAL_GPIO_ReadPin(OCDA_GPIO_Port, GPIO_Pin)
+				== GPIO_PIN_RESET) {
+			ocda = 1;
+		} else {
+			ocda = 0;
+		}
+	} else if (GPIO_Pin == OCDB_Pin) {
+		if (HAL_GPIO_ReadPin(OCDB_GPIO_Port, GPIO_Pin)
+				== GPIO_PIN_RESET) {
+			ocdb = 1;
+		} else {
+			ocdb = 0;
 		}
 	}
 }

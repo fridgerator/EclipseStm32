@@ -1,18 +1,18 @@
 #ifndef PID_v1_h
 #define PID_v1_h
 
+#include "main.h"
+
 #define AUTOMATIC 1
 #define MANUAL 0
 #define REVERSE 1
 #define DIRECT 0
 
-#include "stm32f3xx_hal.h"
-
-class PID {
+class PID1 {
 public:
 	//Constants used in some of the functions below
 	//commonly used functions **************************************************************************
-	PID(float*, float*, float*, float, float, float, int); //   Setpoint.  Initial tuning parameters are also set here
+	PID1(float*, float*, float*, float, float, float, int); //   Setpoint.  Initial tuning parameters are also set here
 	void SetMode(int Mode); // * sets PID to either Manual (0) or Auto (non-0)
 
 	bool Compute(); // * performs the PID calculation.  it should be
@@ -24,9 +24,12 @@ public:
 	//it's likely the user will want to change this depending on
 	//the application
 
+	void SetAccelerationLimits(float, float);	//clamps the output to a specific range. 0-255 by default, but
+
+
 	//available but not commonly used functions ********************************************************
-	void SetTunings(float, float,	// * While most users will set the tunings once in the
-			float);		 //   constructor, this function gives the user the option
+	void SetTunings(float, float,	float);// * While most users will set the tunings once in the
+					 //   constructor, this function gives the user the option
 	//   of changing tunings during runtime for Adaptive control
 	void SetControllerDirection(int);	// * Sets the Direction, or "Action" of the controller. DIRECT
 	//   means the output will increase when error is positive. REVERSE
@@ -67,6 +70,17 @@ private:
 	//   what these values are.  with pointers we'll just know.
 
 	unsigned long lastTime;
+	float prevOutput;
+	float speed;
+	float prevSpeed;
+	float acceleration;
+
+	unsigned long timeOfPrevEnc;
+	unsigned long lastEncoderPosition;
+
+	float minAccel;
+	float maxAccel;
+
 	float ITerm, lastInput;
 
 	unsigned long SampleTime;
@@ -76,4 +90,3 @@ private:
 
 };
 #endif
-
