@@ -313,7 +313,7 @@ __weak uint32_t HAL_GetTick(void)
 __weak void HAL_Delay(__IO uint32_t Delay)
 {
   uint32_t tickstart = HAL_GetTick();
-  uint32_t now;
+  uint32_t now= tickstart;
   while((now - tickstart) < Delay)
   {
   	now = HAL_GetTick();

@@ -50,6 +50,7 @@
 #include <stm32f3xx_hal.h>
 #include <stm32f3xx_hal_adc.h>
 #include <stm32f3xx_hal_adc_ex.h>
+#include <stm32f3xx_hal_conf.h>
 #include <stm32f3xx_hal_cortex.h>
 #include <stm32f3xx_hal_def.h>
 #include <stm32f3xx_hal_flash.h>
@@ -58,15 +59,12 @@
 #include <stm32f3xx_hal_rcc_ex.h>
 #include <stm32f3xx_hal_tim.h>
 #include <stm32f3xx_hal_tim_ex.h>
-
 #include <usb_device.h>
 #include <usbd_cdc.h>
 #include <usbd_def.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <inttypes.h>
-#include <eeprom_flash.h>
 
 #include "PID_v1.h"
 
@@ -79,6 +77,8 @@
 
 // for DFU update sample check ( Usb Firmware Update ):
 // c:\Users\klemen\STM32Cube\Repository\STM32Cube_FW_F3_V1.7.0\Projects\STM32303C_EVAL\Applications\USB_Device\DFU_Standalone\Src\main.c
+// adc triggered by pwm for motors
+//https://community.st.com/thread/37122-stm32l432kc-timer-dma-triggering-adc-dma
 ADC_HandleTypeDef hadc1;
 ADC_HandleTypeDef hadc3;
 
@@ -150,6 +150,9 @@ bool inPidCorrection = false;
 
 float speedRamp = 0.10; // [increment of PWM / ms]
 
+bool safeMode = false;
+int32_t i_emergStop = 0;
+
 // 4094 ... 3.3V
 // x    ... 1.6V
 // x = 1.6*4094/3.3 = 1984
@@ -181,8 +184,13 @@ PID1 myPID2 = PID1(&Input2, &Output2, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
 PID1 myPID1 = PID1(&Input1, &Output1, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
 
 int posDelta;
+uint32_t i = 0;
 
 char *ftoa(char *a, double f, int precision);
+
+uint32_t DMA_ADCvalues1[1024];
+uint32_t DMA_ADCvalues3[1024];
+
 void buildAndSendBuffer();
 void SerialReceive();
 void slowStop();
@@ -275,9 +283,11 @@ void testPWMs() {
 // I=U/R -> I = 0.310 V/1000 Ohm = 0.000310 A = 0.3 mA
 void HAL_Delay(__IO uint32_t Delay) {
 	uint32_t tickstart = HAL_GetTick();
-	uint32_t now;
-	while ((now - tickstart) < Delay) {
+	uint32_t now = tickstart;
+	uint32_t difference = 0;
+	while (difference < Delay) {
 		now = HAL_GetTick();
+		difference = now - tickstart;
 	}
 }
 
@@ -292,7 +302,7 @@ uint8_t printUsb(const char* buf) {
 	}
 	return USBD_FAIL;
 }
-/* USER CODE END 0 */
+
 void myDelay(uint32_t length) {
 	for (unsigned long k = 0; k < length; k++) {
 	}
@@ -364,6 +374,77 @@ uint32_t RTC_ReadBackupRegister(uint32_t RTC_BKP_DR) {
 	return (*(__IO uint32_t *) tmp);
 }
 
+void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
+//     HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
+}
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
+	HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+	if (hadc->Instance == hadc1.Instance) {
+
+	} else if (hadc->Instance == hadc3.Instance) {
+
+	}
+}
+
+void readAdc() {
+	HAL_ADC_Start(&hadc1);
+	if (HAL_ADC_PollForConversion(&hadc1, 100000) == HAL_OK) {
+		if ((HAL_ADC_GetState(&hadc1) & HAL_ADC_STATE_REG_EOC) == HAL_ADC_STATE_REG_EOC) {
+			g_ADCValue1 = HAL_ADC_GetValue(&hadc1);
+			HAL_ADC_Start(&hadc3);
+			if (HAL_ADC_PollForConversion(&hadc3, 100000) == HAL_OK) {
+				if ((HAL_ADC_GetState(&hadc3) & HAL_ADC_STATE_REG_EOC) == HAL_ADC_STATE_REG_EOC) {
+					g_ADCValue3 = HAL_ADC_GetValue(&hadc3);
+
+					/*
+					 if (adcMeasureCount < adcMaxMeasureCount) {
+					 adc1sum = adc1sum + g_ADCValue1;
+					 adc3sum = adc3sum + g_ADCValue3;
+					 adcMeasureCount++;
+					 } else {
+					 adc3Average = adc3sum / adcMeasureCount;
+					 adc1Average = adc1sum / adcMeasureCount;
+					 adc3sum = 0;
+					 adc1sum = 0;
+					 adcMeasureCount = 0;
+					 */
+
+					g_ADCValue = MAX(g_ADCValue3, g_ADCValue1);
+					if (g_ADCValue > g_ADCValue_threshold && safeMode) {
+						emergencyStopTimes++;
+						printUsb("Triggered\n");
+						char f1[10];
+						char f3[10];
+						ftoa(f1, g_ADCValue3, 3);
+						ftoa(f3, g_ADCValue1, 3);
+						sprintf(buffer, "ADC1: %s   ADC2:%s\n", f1, f3);
+						printUsb(buffer);
+
+						fastStop();
+						resetPwm (i);
+						myDelay(5000000);
+						Output1_adj = 0;
+						Output2_adj = 0;
+						if (!emergencyStop) {
+							if (Setpoint1 > Input2) {
+								Setpoint1 = Input2 - 30;
+							} else {
+								Setpoint1 = Input2 + 30;
+							}
+							emergencyStop = true;
+							i_emergStop = i;
+						}
+					}
+//							}
+
+				}
+			}
+		}
+	}
+}
+/* USER CODE END 0 */
+
 int main(void) {
 //	myPID1.SetControllerDirection(REVERSE);
 //	myPID2.SetControllerDirection(DIRECT);
@@ -414,8 +495,16 @@ int main(void) {
 	myPID1.SetMode(AUTOMATIC);
 	myPID1.SetOutputLimits(-850.0, 850.0);
 
-	myPID1.SetAccelerationLimits(-0.5,0.5);
-	myPID2.SetAccelerationLimits(-0.5,0.5);
+	myPID1.SetAccelerationLimits(-0.5, 0.5);
+	myPID2.SetAccelerationLimits(-0.5, 0.5);
+
+	HAL_TIM_Base_Start_IT(&htim1);
+	HAL_TIM_Base_Start_IT(&htim8);
+
+	//HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
+	//HAL_ADCEx_Calibration_Start(&hadc3, ADC_SINGLE_ENDED);
+	HAL_ADC_Start_DMA(&hadc1, (uint32_t *) DMA_ADCvalues1, 1024);
+	HAL_ADC_Start_DMA(&hadc3, (uint32_t *) DMA_ADCvalues3, 1024);
 
 	/* USER CODE END 2 */
 
@@ -427,12 +516,8 @@ int main(void) {
 	//uint32_t value = readFlash(0);
 	//writeFlash(0, value+1);
 	//but better use RTC backup registers (16 32bit available on stm32f3)
-	uint32_t i = 0;
-	uint32_t iOfStandStill = 1;
-	int32_t i_emergStop = 0;
 
-	HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
-	HAL_ADCEx_Calibration_Start(&hadc3, ADC_SINGLE_ENDED);
+	uint32_t iOfStandStill = 1;
 
 	/*
 	 HAL_ADC_Start_IT(&hadc1);
@@ -454,7 +539,7 @@ int main(void) {
 	htim4.Instance->CNT = 32768;
 	Setpoint1 = 32768;
 
-//printUsb("VOGA TableLifter Init finished.\n\r");
+//printUsb("TableLifter Init finished.\n\r");
 
 	if (HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL) != HAL_OK) {
 		printUsb("Error starting encoder 3");
@@ -467,6 +552,11 @@ int main(void) {
 	resetPwm(0);
 	//testPWMs();
 
+	for (int i = 0; i < 10; i++) {
+		HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+		HAL_Delay(50);
+	}
+
 	while (1) {
 		/* USER CODE END WHILE */
 
@@ -476,62 +566,9 @@ int main(void) {
 		g_ADCValue1 = 0;
 		g_ADCValue3 = 0;
 
-		bool controlPower1 = true;
+		bool controlPower1 = false;
 		if (controlPower1) {
-			HAL_ADC_Start(&hadc1);
-			if (HAL_ADC_PollForConversion(&hadc1, 100000) == HAL_OK) {
-				if ((HAL_ADC_GetState(&hadc1) & HAL_ADC_STATE_REG_EOC) == HAL_ADC_STATE_REG_EOC) {
-					g_ADCValue1 = HAL_ADC_GetValue(&hadc1);
-					HAL_ADC_Start(&hadc3);
-					if (HAL_ADC_PollForConversion(&hadc3, 100000) == HAL_OK) {
-						if ((HAL_ADC_GetState(&hadc3) & HAL_ADC_STATE_REG_EOC) == HAL_ADC_STATE_REG_EOC) {
-							g_ADCValue3 = HAL_ADC_GetValue(&hadc3);
-
-							/*
-							 if (adcMeasureCount < adcMaxMeasureCount) {
-							 adc1sum = adc1sum + g_ADCValue1;
-							 adc3sum = adc3sum + g_ADCValue3;
-							 adcMeasureCount++;
-							 } else {
-							 adc3Average = adc3sum / adcMeasureCount;
-							 adc1Average = adc1sum / adcMeasureCount;
-							 adc3sum = 0;
-							 adc1sum = 0;
-							 adcMeasureCount = 0;
-							 */
-
-							g_ADCValue = MAX(g_ADCValue3, g_ADCValue1);
-							if (g_ADCValue > g_ADCValue_threshold) {
-								emergencyStopTimes++;
-								printUsb("Triggered\n");
-								char f1[10];
-								char f3[10];
-								ftoa(f1, g_ADCValue3, 3);
-								ftoa(f3, g_ADCValue1, 3);
-								sprintf(buffer, "ADC1: %s   ADC2:%s\n", f1, f3);
-								printUsb(buffer);
-
-								fastStop();
-								resetPwm(i);
-								myDelay(5000000);
-								Output1_adj = 0;
-								Output2_adj = 0;
-								if (!emergencyStop) {
-									if (Setpoint1 > Input2) {
-										Setpoint1 = Input2 - 30;
-									} else {
-										Setpoint1 = Input2 + 30;
-									}
-									emergencyStop = true;
-									i_emergStop = i;
-								}
-							}
-//							}
-
-						}
-					}
-				}
-			}
+			readAdc();
 		}
 
 		if (HAL_GetTick() - last6seconds >= SIXSECONDS) {
@@ -847,11 +884,11 @@ void SerialReceive() {
 				}
 
 				if (Direct_Reverse == 0) {
-					myPID2.SetControllerDirection( DIRECT); // * set the controller Direction
-					myPID1.SetControllerDirection( DIRECT); // * set the controller Direction
+					myPID2.SetControllerDirection(DIRECT); // * set the controller Direction
+					myPID1.SetControllerDirection(DIRECT); // * set the controller Direction
 				} else {
-					myPID2.SetControllerDirection( REVERSE); //
-					myPID1.SetControllerDirection( REVERSE); //
+					myPID2.SetControllerDirection(REVERSE); //
+					myPID1.SetControllerDirection(REVERSE); //
 				}
 			}
 			received_data_size = 0;
@@ -944,6 +981,7 @@ static void MX_NVIC_Init(void) {
 
 /* ADC1 init function */
 static void MX_ADC1_Init(void) {
+// https://community.st.com/thread/37122-stm32l432kc-timer-dma-triggering-adc-dma
 
 	ADC_MultiModeTypeDef multimode;
 	ADC_ChannelConfTypeDef sConfig;
@@ -956,11 +994,11 @@ static void MX_ADC1_Init(void) {
 	hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
 	hadc1.Init.ContinuousConvMode = ENABLE;
 	hadc1.Init.DiscontinuousConvMode = DISABLE;
-	hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
-	hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+	hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING; //ADC_EXTERNALTRIGCONVEDGE_NONE;
+	hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIGCONV_T1_TRGO; //ADC_SOFTWARE_START;
 	hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
 	hadc1.Init.NbrOfConversion = 1;
-	hadc1.Init.DMAContinuousRequests = DISABLE;
+	hadc1.Init.DMAContinuousRequests = ENABLE;
 	hadc1.Init.EOCSelection = ADC_EOC_SEQ_CONV;
 	hadc1.Init.LowPowerAutoWait = DISABLE;
 	hadc1.Init.Overrun = ADC_OVR_DATA_OVERWRITTEN;
@@ -1004,11 +1042,11 @@ static void MX_ADC3_Init(void) {
 	hadc3.Init.ScanConvMode = ADC_SCAN_DISABLE;
 	hadc3.Init.ContinuousConvMode = ENABLE;
 	hadc3.Init.DiscontinuousConvMode = DISABLE;
-	hadc3.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
-	hadc3.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+	hadc3.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONV_T8_TRGO; //ADC_EXTERNALTRIGCONVEDGE_NONE;
+	hadc3.Init.ExternalTrigConv = ADC_EXTERNALTRIGCONVEDGE_RISING; //ADC_SOFTWARE_START;
 	hadc3.Init.DataAlign = ADC_DATAALIGN_RIGHT;
 	hadc3.Init.NbrOfConversion = 1;
-	hadc3.Init.DMAContinuousRequests = DISABLE;
+	hadc3.Init.DMAContinuousRequests = ENABLE;
 	hadc3.Init.EOCSelection = ADC_EOC_SEQ_CONV;
 	hadc3.Init.LowPowerAutoWait = DISABLE;
 	hadc3.Init.Overrun = ADC_OVR_DATA_OVERWRITTEN;
@@ -1066,27 +1104,24 @@ static void MX_TIM1_Init(void) {
 		Error_Handler();
 	}
 
-	sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-	sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
-	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+	sMasterConfig.MasterOutputTrigger = TIM_TRGO_OC1REF;
+	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_ENABLE;
 	if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK) {
 		Error_Handler();
 	}
 
 	sConfigOC.OCMode = TIM_OCMODE_PWM1;
-	sConfigOC.Pulse = 10;
+	sConfigOC.Pulse = 0;
 	sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
 	sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
-	sConfigOC.OCFastMode = TIM_OCFAST_ENABLE;
+	sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
 	sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
-	sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_SET;
-	if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC,
-	TIM_CHANNEL_1) != HAL_OK) {
+	sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
+	if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1) != HAL_OK) {
 		Error_Handler();
 	}
 
-	if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC,
-	TIM_CHANNEL_2) != HAL_OK) {
+	if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_2) != HAL_OK) {
 		Error_Handler();
 	}
 
@@ -1203,27 +1238,24 @@ static void MX_TIM8_Init(void) {
 		Error_Handler();
 	}
 
-	sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-	sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
-	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+	sMasterConfig.MasterOutputTrigger = TIM_TRGO_OC2REF;
+	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_ENABLE;
 	if (HAL_TIMEx_MasterConfigSynchronization(&htim8, &sMasterConfig) != HAL_OK) {
 		Error_Handler();
 	}
 
 	sConfigOC.OCMode = TIM_OCMODE_PWM1;
-	sConfigOC.Pulse = 10;
+	sConfigOC.Pulse = 0;
 	sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
 	sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
 	sConfigOC.OCFastMode = TIM_OCFAST_ENABLE;
 	sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
-	sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_SET;
-	if (HAL_TIM_PWM_ConfigChannel(&htim8, &sConfigOC,
-	TIM_CHANNEL_1) != HAL_OK) {
+	sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
+	if (HAL_TIM_PWM_ConfigChannel(&htim8, &sConfigOC, TIM_CHANNEL_1) != HAL_OK) {
 		Error_Handler();
 	}
 
-	if (HAL_TIM_PWM_ConfigChannel(&htim8, &sConfigOC,
-	TIM_CHANNEL_2) != HAL_OK) {
+	if (HAL_TIM_PWM_ConfigChannel(&htim8, &sConfigOC, TIM_CHANNEL_2) != HAL_OK) {
 		Error_Handler();
 	}
 
@@ -1246,7 +1278,7 @@ static void MX_TIM8_Init(void) {
 
 }
 
-/** Configure pins as 
+/** Configure pins as
  * Analog
  * Input
  * Output
