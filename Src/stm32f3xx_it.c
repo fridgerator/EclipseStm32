@@ -36,12 +36,10 @@
 #include "stm32f3xx_it.h"
 
 /* USER CODE BEGIN 0 */
-#define ADCCONVERTEDVALUES_BUFFER_SIZE ((uint32_t)  256)    /* Size of array containing ADC converted values */
-
-extern uint32_t button1On;
-extern uint32_t button2On;
-extern uint32_t ocda;
-extern uint32_t ocdb;
+extern uint8_t button1On;
+extern uint8_t button2On;
+extern uint8_t ocda;
+extern uint8_t ocdb;
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	if (GPIO_Pin == Button1_Pin) {
@@ -244,6 +242,7 @@ void USB_LP_CAN_RX0_IRQHandler(void)
 void EXTI9_5_IRQHandler(void)
 {
   /* USER CODE BEGIN EXTI9_5_IRQn 0 */
+
   /* USER CODE END EXTI9_5_IRQn 0 */
   HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_9);
   /* USER CODE BEGIN EXTI9_5_IRQn 1 */

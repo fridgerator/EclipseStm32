@@ -1,8 +1,13 @@
 /**
   ******************************************************************************
-  * File Name          : main.h
+  * File Name          : main.hpp
   * Description        : This file contains the common defines of the application
   ******************************************************************************
+  * This notice applies to any and all portions of this file
+  * that are not between comment pairs USER CODE BEGIN and
+  * USER CODE END. Other portions of this file, whether 
+  * inserted by the user or by software development tools
+  * are owned by their respective copyright owners.
   *
   * Copyright (c) 2017 STMicroelectronics International N.V. 
   * All rights reserved.
@@ -45,36 +50,38 @@
 #define __MAIN_H
   /* Includes ------------------------------------------------------------------*/
 
+/* Includes ------------------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include <sys/_stdint.h>
-
 /* USER CODE END Includes */
 
 /* Private define ------------------------------------------------------------*/
+
 #define PWM1_Pin GPIO_PIN_13
 #define PWM1_GPIO_Port GPIOC
-#define INH1_Pin GPIO_PIN_4
-
-#define OCDB_GPIO_Port GPIOA
+#define INH2_Pin GPIO_PIN_4
+#define INH2_GPIO_Port GPIOA
 #define OCDB_Pin GPIO_PIN_5
-#define OCDA_GPIO_Port GPIOA
+#define OCDB_GPIO_Port GPIOA
 #define OCDA_Pin GPIO_PIN_6
-
-#define INH1_GPIO_Port GPIOA
+#define OCDA_GPIO_Port GPIOA
 #define PWM3_Pin GPIO_PIN_7
 #define PWM3_GPIO_Port GPIOA
 #define PWM4_Pin GPIO_PIN_0
 #define PWM4_GPIO_Port GPIOB
-#define INH2_Pin GPIO_PIN_11
-#define INH2_GPIO_Port GPIOB
-#define LED_Pin GPIO_PIN_8
-#define LED_GPIO_Port GPIOA
+#define INH1_Pin GPIO_PIN_11
+#define INH1_GPIO_Port GPIOB
+#define CAP_IN_Pin GPIO_PIN_13
+#define CAP_IN_GPIO_Port GPIOB
 #define PWM2_Pin GPIO_PIN_14
 #define PWM2_GPIO_Port GPIOB
+#define LED_Pin GPIO_PIN_8
+#define LED_GPIO_Port GPIOA
 #define Button1_Pin GPIO_PIN_9
 #define Button1_GPIO_Port GPIOA
+#define Button1_EXTI_IRQn EXTI9_5_IRQn
 #define Button2_Pin GPIO_PIN_10
 #define Button2_GPIO_Port GPIOA
+#define Button2_EXTI_IRQn EXTI15_10_IRQn
 #define ENC3_Pin GPIO_PIN_4
 #define ENC3_GPIO_Port GPIOB
 #define ENC4_Pin GPIO_PIN_5
@@ -83,11 +90,27 @@
 #define ENC2_GPIO_Port GPIOB
 #define ENC1_Pin GPIO_PIN_7
 #define ENC1_GPIO_Port GPIOB
+
+/* ########################## Assert Selection ############################## */
+/**
+  * @brief Uncomment the line below to expanse the "assert_param" macro in the 
+  *        HAL drivers code
+  */
+/* #define USE_FULL_ASSERT    1U */
+
 /* USER CODE BEGIN Private defines */
 
-uint8_t printUsb(const char* buf);
-
 /* USER CODE END Private defines */
+
+#ifdef __cplusplus
+ extern "C" {
+#endif
+void _Error_Handler(char *, int);
+
+#define Error_Handler() _Error_Handler(__FILE__, __LINE__)
+#ifdef __cplusplus
+}
+#endif
 
 /**
   * @}
