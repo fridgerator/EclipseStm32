@@ -41,6 +41,7 @@ extern uint8_t button2On;
 extern uint8_t ocda;
 extern uint8_t ocdb;
 
+
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	if (GPIO_Pin == Button1_Pin) {
 		if (HAL_GPIO_ReadPin(Button1_GPIO_Port, Button1_Pin)
@@ -77,6 +78,8 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 
 /* External variables --------------------------------------------------------*/
 extern PCD_HandleTypeDef hpcd_USB_FS;
+extern DMA_HandleTypeDef hdma_adc1;
+extern DMA_HandleTypeDef hdma_adc3;
 extern TIM_HandleTypeDef htim3;
 extern TIM_HandleTypeDef htim4;
 
@@ -223,6 +226,20 @@ void SysTick_Handler(void)
 /******************************************************************************/
 
 /**
+* @brief This function handles DMA1 channel1 global interrupt.
+*/
+void DMA1_Channel1_IRQHandler(void)
+{
+  /* USER CODE BEGIN DMA1_Channel1_IRQn 0 */
+
+  /* USER CODE END DMA1_Channel1_IRQn 0 */
+  HAL_DMA_IRQHandler(&hdma_adc1);
+  /* USER CODE BEGIN DMA1_Channel1_IRQn 1 */
+
+  /* USER CODE END DMA1_Channel1_IRQn 1 */
+}
+
+/**
 * @brief This function handles USB low priority or CAN_RX0 interrupts.
 */
 void USB_LP_CAN_RX0_IRQHandler(void)
@@ -290,6 +307,20 @@ void EXTI15_10_IRQHandler(void)
   /* USER CODE BEGIN EXTI15_10_IRQn 1 */
 
   /* USER CODE END EXTI15_10_IRQn 1 */
+}
+
+/**
+* @brief This function handles DMA2 channel5 global interrupt.
+*/
+void DMA2_Channel5_IRQHandler(void)
+{
+  /* USER CODE BEGIN DMA2_Channel5_IRQn 0 */
+
+  /* USER CODE END DMA2_Channel5_IRQn 0 */
+  HAL_DMA_IRQHandler(&hdma_adc3);
+  /* USER CODE BEGIN DMA2_Channel5_IRQn 1 */
+
+  /* USER CODE END DMA2_Channel5_IRQn 1 */
 }
 
 /* USER CODE BEGIN 1 */

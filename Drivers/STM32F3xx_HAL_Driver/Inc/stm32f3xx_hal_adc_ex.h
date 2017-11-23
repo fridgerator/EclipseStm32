@@ -135,7 +135,7 @@ typedef struct
                                        Note: This parameter must be modified when no conversion is on going on both regular and injected groups (ADC disabled, or ADC enabled without continuous mode or external trigger that could launch a conversion). */
   uint32_t Overrun;               /*!< Select the behaviour in case of overrun: data overwritten (default) or preserved.
                                        This parameter is for regular group only.
-                                       This parameter can be a value of @ref ADCEx_Overrun
+                                       This parameter can be a value of @ref c
                                        Note: Case of overrun set to data preserved and usage with end on conversion interruption (HAL_Start_IT()): ADC IRQ handler has to clear end of conversion flags, this induces the release of the preserved data. If needed, this data can be saved into function HAL_ADC_ConvCpltCallback() (called before end of conversion flags clear).
                                        Note: Error reporting in function of conversion mode:
                                         - Usage with ADC conversion by polling for event or interruption: Error is reported only if overrun is set to data preserved. If overrun is set to data overwritten, user can willingly not read the conversion data each time, this is not considered as an erroneous case.
