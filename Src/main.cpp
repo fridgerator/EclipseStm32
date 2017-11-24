@@ -1246,7 +1246,11 @@ static void MX_I2C1_Init(void) {
 	;
 
 	I2cHandle.Instance = I2C1;
-	I2cHandle.Init.Timing = 0x0010020A; //0x2000090E;
+
+	// I2C timing configuration tool for STM32F3xx and STM32F0xx microcontrollers (AN4235)
+	//http://www.st.com/en/embedded-software/stsw-stm32126.html
+	I2cHandle.Init.Timing = 0x0010020A;
+
 	I2cHandle.Init.OwnAddress1 = 0;
 	I2cHandle.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
 	I2cHandle.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
