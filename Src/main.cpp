@@ -441,52 +441,9 @@ void readAdc() {
 	}
 }
 
-/* USER CODE END 0 */
 
-int main(void) {
-
-	/* USER CODE BEGIN 1 */
-
-	/* USER CODE END 1 */
-
-	/* MCU Configuration----------------------------------------------------------*/
-
-	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-	HAL_Init();
-
-	/* USER CODE BEGIN Init */
-
-	/* USER CODE END Init */
-
-	/* Configure the system clock */
-	SystemClock_Config();
-
-	/* USER CODE BEGIN SysInit */
-
-	/* USER CODE END SysInit */
-
-	/* Initialize all configured peripherals */
-	MX_GPIO_Init();
-	MX_DMA_Init();
-	MX_ADC1_Init();
-	MX_TIM1_Init();
-	MX_TIM8_Init();
-	MX_ADC3_Init();
-	MX_TIM4_Init();
-	MX_TIM3_Init();
-	MX_USB_DEVICE_Init();
-	MX_I2C1_Init();
-
-	/* Initialize interrupts */
-	MX_NVIC_Init();
-
-	/* USER CODE BEGIN 2 */
-
-	/* USER CODE END 2 */
-
-	/* Infinite loop */
-	/* USER CODE BEGIN WHILE */
-
+void readI2C()
+{
 	long i2cMeasure = 0;
 	uint8_t aRxBuffer[2];
 
@@ -636,6 +593,55 @@ int main(void) {
 		i2cMeasure++;
 
 	}
+
+}
+/* USER CODE END 0 */
+
+int main(void) {
+
+	/* USER CODE BEGIN 1 */
+
+	/* USER CODE END 1 */
+
+	/* MCU Configuration----------------------------------------------------------*/
+
+	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+	HAL_Init();
+
+	/* USER CODE BEGIN Init */
+
+	/* USER CODE END Init */
+
+	/* Configure the system clock */
+	SystemClock_Config();
+
+	/* USER CODE BEGIN SysInit */
+
+	/* USER CODE END SysInit */
+
+	/* Initialize all configured peripherals */
+	MX_GPIO_Init();
+	MX_DMA_Init();
+	MX_ADC1_Init();
+	MX_TIM1_Init();
+	MX_TIM8_Init();
+	MX_ADC3_Init();
+	MX_TIM4_Init();
+	MX_TIM3_Init();
+	MX_USB_DEVICE_Init();
+	MX_I2C1_Init();
+
+	/* Initialize interrupts */
+	MX_NVIC_Init();
+
+	/* USER CODE BEGIN 2 */
+
+	/* USER CODE END 2 */
+
+	/* Infinite loop */
+	/* USER CODE BEGIN WHILE */
+
+	//readI2C();
 
 	HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1); //starts PWM on CH1N pin
 	HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2); //starts PWM on CH2N pin
@@ -1158,7 +1164,7 @@ static void MX_ADC1_Init(void) {
 	hadc1.Init.ContinuousConvMode = DISABLE;
 	hadc1.Init.DiscontinuousConvMode = DISABLE;
 	hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
-	hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIGCONV_T1_TRGO;
+	hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIGCONV_T1_TRGO2;
 	hadc1.Init.DataAlign = ADC_DATAALIGN_LEFT;
 	hadc1.Init.NbrOfConversion = 1;
 	hadc1.Init.NbrOfDiscConversion = 1;
@@ -1207,7 +1213,7 @@ static void MX_ADC3_Init(void) {
 	hadc3.Init.ContinuousConvMode = DISABLE;
 	hadc3.Init.DiscontinuousConvMode = DISABLE;
 	hadc3.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
-	hadc3.Init.ExternalTrigConv = ADC_EXTERNALTRIGCONV_T8_TRGO;
+	hadc3.Init.ExternalTrigConv = ADC_EXTERNALTRIGCONV_T8_TRGO2;
 	hadc3.Init.DataAlign = ADC_DATAALIGN_LEFT;
 	hadc3.Init.NbrOfConversion = 1;
 	hadc3.Init.NbrOfDiscConversion = 1;
@@ -1296,23 +1302,23 @@ static void MX_TIM1_Init(void) {
 	htim1.Init.RepetitionCounter = 0;
 	htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
 	if (HAL_TIM_Base_Init(&htim1) != HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
+		Error_Handler();
 	}
 
 	sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
 	if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
+		Error_Handler();
 	}
 
 	if (HAL_TIM_PWM_Init(&htim1) != HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
+		Error_Handler();
 	}
 
-	sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
-	//sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
+	sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+	sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_UPDATE;
 	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_ENABLE;
 	if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
+		Error_Handler();
 	}
 
 	sConfigOC.OCMode = TIM_OCMODE_PWM1;
@@ -1323,11 +1329,10 @@ static void MX_TIM1_Init(void) {
 	sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
 	sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_SET;
 	if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1) != HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
+		Error_Handler();
 	}
-
 	if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_2) != HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
+		Error_Handler();
 	}
 
 	sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
@@ -1342,12 +1347,13 @@ static void MX_TIM1_Init(void) {
 	sBreakDeadTimeConfig.Break2Filter = 0;
 	sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
 	if (HAL_TIMEx_ConfigBreakDeadTime(&htim1, &sBreakDeadTimeConfig) != HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
+		Error_Handler();
 	}
 
 	HAL_TIM_MspPostInit(&htim1);
 
 }
+
 
 /* TIM3 init function */
 static void MX_TIM3_Init(void) {
@@ -1432,22 +1438,23 @@ static void MX_TIM8_Init(void) {
 	htim8.Init.RepetitionCounter = 0;
 	htim8.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
 	if (HAL_TIM_Base_Init(&htim8) != HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
+		Error_Handler();
 	}
 
 	sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
 	if (HAL_TIM_ConfigClockSource(&htim8, &sClockSourceConfig) != HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
+		Error_Handler();
 	}
 
 	if (HAL_TIM_PWM_Init(&htim8) != HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
+		Error_Handler();
 	}
 
-	sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
+	sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+	sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_UPDATE;
 	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_ENABLE;
 	if (HAL_TIMEx_MasterConfigSynchronization(&htim8, &sMasterConfig) != HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
+		Error_Handler();
 	}
 
 	sConfigOC.OCMode = TIM_OCMODE_PWM1;
@@ -1458,11 +1465,11 @@ static void MX_TIM8_Init(void) {
 	sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
 	sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_SET;
 	if (HAL_TIM_PWM_ConfigChannel(&htim8, &sConfigOC, TIM_CHANNEL_1) != HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
+		Error_Handler();
 	}
 
 	if (HAL_TIM_PWM_ConfigChannel(&htim8, &sConfigOC, TIM_CHANNEL_2) != HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
+		Error_Handler();
 	}
 
 	sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
@@ -1477,7 +1484,7 @@ static void MX_TIM8_Init(void) {
 	sBreakDeadTimeConfig.Break2Filter = 0;
 	sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
 	if (HAL_TIMEx_ConfigBreakDeadTime(&htim8, &sBreakDeadTimeConfig) != HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
+		Error_Handler();
 	}
 
 	HAL_TIM_MspPostInit(&htim8);

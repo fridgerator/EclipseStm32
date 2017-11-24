@@ -1,7 +1,7 @@
 #ifndef PID_v1_h
 #define PID_v1_h
 
-#include "main.h"
+#include "stm32f303xc.h"
 
 #define AUTOMATIC 1
 #define MANUAL 0
