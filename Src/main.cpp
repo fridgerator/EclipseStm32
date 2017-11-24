@@ -1308,7 +1308,7 @@ static void MX_TIM1_Init(void) {
 
 	sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
 	//sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
-	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_ENABLE;
 	if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK) {
 		_Error_Handler(__FILE__, __LINE__);
 	}
@@ -1442,7 +1442,7 @@ static void MX_TIM8_Init(void) {
 	}
 
 	sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
-	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_ENABLE;
 	if (HAL_TIMEx_MasterConfigSynchronization(&htim8, &sMasterConfig) != HAL_OK) {
 		_Error_Handler(__FILE__, __LINE__);
 	}
