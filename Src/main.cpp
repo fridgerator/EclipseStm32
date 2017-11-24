@@ -47,6 +47,9 @@
  */
 
 /* Includes ------------------------------------------------------------------*/
+
+/* Includes ------------------------------------------------------------------*/
+#include <numeric>
 #include "main.h"
 #include "stm32f3xx_hal.h"
 #include "usb_device.h"
@@ -61,7 +64,16 @@
 
 #define SIXSECONDS (6*1000L) // three seconds are 3000 milliseconds
 #define THREESECONDS (3*1000L) // three seconds are 3000 milliseconds
-#define ADCCONVERTEDVALUES_BUFFER_SIZE ((uint32_t)  256)    /* Size of array containing ADC converted values */
+const int ADC_BUFFER_LENGTH_WORDS = 1024; //32 bit words
+const int ADC_BUFFER_LENGTH = ADC_BUFFER_LENGTH_WORDS * sizeof(uint32_t);
+uint32_t DMA_ADCvalues1[ADC_BUFFER_LENGTH_WORDS];
+uint32_t DMA_ADCvalues3[ADC_BUFFER_LENGTH_WORDS];
+int g_DmaOffsetBeforeAveragingF1, g_DmaOffsetAfterAveragingF1;
+int g_DmaOffsetBeforeAveragingH1, g_DmaOffsetAfterAveragingH1;
+uint32_t g_MeasurementNumber1;
+int g_DmaOffsetBeforeAveragingF3, g_DmaOffsetAfterAveragingF3;
+int g_DmaOffsetBeforeAveragingH3, g_DmaOffsetAfterAveragingH3;
+uint32_t g_MeasurementNumber3;
 
 /* Exported macro ------------------------------------------------------------*/
 #define COUNTOF(__BUFFER__)   (sizeof(__BUFFER__) / sizeof(*(__BUFFER__)))
@@ -129,8 +141,8 @@ uint32_t button1Count = 0;
 uint32_t UNBOUNCE_CNT = 3;
 uint32_t alreadyResetted = 0;
 
-uint32_t g_ADCValue1 = 0;
-uint32_t g_ADCValue3 = 0;
+float g_ADCValue1 = 0;
+float g_ADCValue3 = 0;
 
 long inPosition1, inPosition2;
 
@@ -216,8 +228,6 @@ PID1 myPID1 = PID1(&Input1, &Output1, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
 
 int posDelta;
 uint32_t i = 0;
-uint32_t DMA_ADCvalues1[1024];
-uint32_t DMA_ADCvalues3[1024];
 
 static int8_t sign(float val1, float val2) {
 	if (val1 > val2)
@@ -358,19 +368,41 @@ uint32_t RTC_ReadBackupRegister(uint32_t RTC_BKP_DR) {
 }
 
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
-	//HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+	if (hadc->Instance == hadc1.Instance) {
+		g_DmaOffsetBeforeAveragingH1 = ADC_BUFFER_LENGTH - DMA1_Channel1->CNDTR;
+		g_ADCValue1 = std::accumulate(DMA_ADCvalues1, DMA_ADCvalues1 + ADC_BUFFER_LENGTH / 2, 0) / (ADC_BUFFER_LENGTH / 2);
+		g_DmaOffsetAfterAveragingH1 = ADC_BUFFER_LENGTH - DMA1_Channel1->CNDTR;
+		g_MeasurementNumber1 += ADC_BUFFER_LENGTH/2;
+	} else if (hadc->Instance == hadc3.Instance) {
+		g_DmaOffsetBeforeAveragingH3 = ADC_BUFFER_LENGTH - DMA2_Channel5->CNDTR;
+		g_ADCValue1 = std::accumulate(DMA_ADCvalues3, DMA_ADCvalues3 + ADC_BUFFER_LENGTH / 2, 0) / (ADC_BUFFER_LENGTH / 2);
+		g_DmaOffsetAfterAveragingH3 = ADC_BUFFER_LENGTH - DMA2_Channel5->CNDTR;
+		g_MeasurementNumber3 += ADC_BUFFER_LENGTH/2;
+	}
+	g_ADCValue = MAX(g_ADCValue3, g_ADCValue1);
+	if(DMA_ADCvalues1[0]>0 || DMA_ADCvalues3[0]>0)
+	{
+		asm("nop");
+	}
+	HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+	HAL_ADC_Start_IT(hadc);
 }
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
 	if (hadc->Instance == hadc1.Instance) {
-		HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-		//SET_BIT((hadc1).Instance->CR, ADC_CR_ADSTART);
-		HAL_ADC_Start_IT(hadc);
+		g_DmaOffsetBeforeAveragingF1 = ADC_BUFFER_LENGTH - DMA1_Channel1->CNDTR;
+		g_ADCValue1 = std::accumulate(DMA_ADCvalues1 + ADC_BUFFER_LENGTH / 2, DMA_ADCvalues1 + ADC_BUFFER_LENGTH, 0) / (ADC_BUFFER_LENGTH / 2);
+		g_DmaOffsetAfterAveragingF1 = ADC_BUFFER_LENGTH - DMA1_Channel1->CNDTR;
+		g_MeasurementNumber1 += ADC_BUFFER_LENGTH/2;
 	} else if (hadc->Instance == hadc3.Instance) {
-		HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-		//SET_BIT((hadc3).Instance->CR, ADC_CR_ADSTART);
-		HAL_ADC_Start_IT(hadc);
+		g_DmaOffsetBeforeAveragingF3 = ADC_BUFFER_LENGTH - DMA2_Channel5->CNDTR;
+		g_ADCValue3 = std::accumulate(DMA_ADCvalues3 + ADC_BUFFER_LENGTH / 2, DMA_ADCvalues3 + ADC_BUFFER_LENGTH, 0) / (ADC_BUFFER_LENGTH / 2);
+		g_DmaOffsetAfterAveragingF3 = ADC_BUFFER_LENGTH - DMA2_Channel5->CNDTR;
+		g_MeasurementNumber3 += ADC_BUFFER_LENGTH/2;
 	}
+	g_ADCValue = MAX(g_ADCValue3, g_ADCValue1);
+	HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+	HAL_ADC_Start_IT(hadc);
 }
 
 //void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *I2cHandle) {
@@ -441,13 +473,11 @@ void readAdc() {
 	}
 }
 
-
-void readI2C()
-{
+void readI2C() {
 	long i2cMeasure = 0;
 	uint8_t aRxBuffer[2];
 
-	// read chip MANUFACTURER_ID
+// read chip MANUFACTURER_ID
 	uint16_t REG_CHIP_MEM_ADDR = 0x7e;
 	if (HAL_I2C_Mem_Read(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, 10000) != HAL_OK) {
 		/* Error_Handler() function is called when Timeout error occurs.
@@ -460,10 +490,10 @@ void readI2C()
 	uint16_t manufacturer = aRxBuffer[0] << 8;
 	manufacturer |= aRxBuffer[1];
 
-	//CH0_FREF_DIVIDER
+//CH0_FREF_DIVIDER
 	REG_CHIP_MEM_ADDR = 0x14;
-	//uint8_t aTxBuffer[2] = { 0b00100000, 0b00000001 };
-	uint8_t aTxBuffer[2] = { (0x2001 >> 8), (0x2001 & 0xff)};
+//uint8_t aTxBuffer[2] = { 0b00100000, 0b00000001 };
+	uint8_t aTxBuffer[2] = { (0x2001 >> 8), (0x2001 & 0xff) };
 
 	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer, 2, 10000) != HAL_OK) {
 		/* Error_Handler() function is called when Timeout error occurs.
@@ -474,9 +504,9 @@ void readI2C()
 		}
 	}
 
-	//DRIVE_CURRENT_CH0
+//DRIVE_CURRENT_CH0
 	REG_CHIP_MEM_ADDR = 0x1E;
-	uint8_t aTxBuffer2[2] = { (0x7C00 >> 8), (0x7C00 & 0xff)};
+	uint8_t aTxBuffer2[2] = { (0x7C00 >> 8), (0x7C00 & 0xff) };
 	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer2, 2, 10000) != HAL_OK) {
 		/* Error_Handler() function is called when Timeout error occurs.
 		 When Acknowledge failure occurs (Slave don't acknowledge its address)
@@ -486,10 +516,9 @@ void readI2C()
 		}
 	}
 
-
-	//SETTLECOUNT
+//SETTLECOUNT
 	REG_CHIP_MEM_ADDR = 0x10;
-	uint8_t aTxBuffer3[2] = { (0x000A >> 8), (0x000A & 0xff)};
+	uint8_t aTxBuffer3[2] = { (0x000A >> 8), (0x000A & 0xff) };
 	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer3, 2, 10000) != HAL_OK) {
 		/* Error_Handler() function is called when Timeout error occurs.
 		 When Acknowledge failure occurs (Slave don't acknowledge its address)
@@ -499,10 +528,9 @@ void readI2C()
 		}
 	}
 
-
-	//CH0_RCOUNT
+//CH0_RCOUNT
 	REG_CHIP_MEM_ADDR = 0x08;
-	uint8_t aTxBuffer4[2] = { (0x2089 >> 8), (0x2089 & 0xff)};
+	uint8_t aTxBuffer4[2] = { (0x2089 >> 8), (0x2089 & 0xff) };
 	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer4, 2, 10000) != HAL_OK) {
 		/* Error_Handler() function is called when Timeout error occurs.
 		 When Acknowledge failure occurs (Slave don't acknowledge its address)
@@ -512,9 +540,9 @@ void readI2C()
 		}
 	}
 
-	//MUX_CONFIG
+//MUX_CONFIG
 	REG_CHIP_MEM_ADDR = 0x1B;
-	uint8_t aTxBuffer5[2] = { (0xC20D >> 8), (0xC20D & 0xff)};
+	uint8_t aTxBuffer5[2] = { (0xC20D >> 8), (0xC20D & 0xff) };
 	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer5, 2, 10000) != HAL_OK) {
 		/* Error_Handler() function is called when Timeout error occurs.
 		 When Acknowledge failure occurs (Slave don't acknowledge its address)
@@ -524,9 +552,9 @@ void readI2C()
 		}
 	}
 
-	//CONFIG
+//CONFIG
 	REG_CHIP_MEM_ADDR = 0x1A;
-	uint8_t aTxBuffer6[2] = { (0x1601 >> 8), (0x1601 & 0xff)};
+	uint8_t aTxBuffer6[2] = { (0x1601 >> 8), (0x1601 & 0xff) };
 	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer6, 2, 10000) != HAL_OK) {
 		/* Error_Handler() function is called when Timeout error occurs.
 		 When Acknowledge failure occurs (Slave don't acknowledge its address)
@@ -559,7 +587,6 @@ void readI2C()
 
 		}
 
-
 		REG_CHIP_MEM_ADDR = 0x00;
 		if (HAL_I2C_Mem_Read(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, 10000) != HAL_OK) {
 			/* Error_Handler() function is called when Timeout error occurs.
@@ -587,8 +614,6 @@ void readI2C()
 		char buf3[30] = "";
 		sprintf(buf3, "%d Cap value0= %d value1= %d\n", i2cMeasure, capValue0, capValue1);
 		printUsb(buf3);
-
-
 
 		i2cMeasure++;
 
@@ -641,8 +666,7 @@ int main(void) {
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
 
-	//readI2C();
-
+//readI2C();
 	HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1); //starts PWM on CH1N pin
 	HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2); //starts PWM on CH2N pin
 
@@ -684,11 +708,11 @@ int main(void) {
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
 
-	//writeFlash();
-	// write to flash is possible like this:
-	//uint32_t value = readFlash(0);
-	//writeFlash(0, value+1);
-	//but better use RTC backup registers (16 32bit available on stm32f3)
+//writeFlash();
+// write to flash is possible like this:
+//uint32_t value = readFlash(0);
+//writeFlash(0, value+1);
+//but better use RTC backup registers (16 32bit available on stm32f3)
 	uint32_t iOfStandStill = 1;
 
 	/*
@@ -720,9 +744,9 @@ int main(void) {
 		printUsb("Error starting encoder 4");
 	}
 
-	//HAL_Delay(100);
+//HAL_Delay(100);
 	resetPwm(0);
-	//testPWMs();
+//testPWMs();
 
 	for (int i = 0; i < 10; i++) {
 		HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
@@ -991,6 +1015,13 @@ void buildAndSendBuffer() {
 	sprintf(buf3, " %d %d", ocda, ocdb);
 	strcat(buffer, buf3);
 
+	char f4[10];
+	char f5[10];
+	strcat(buffer, " ");
+	strcat(buffer, ftoa(f4, g_ADCValue1, 3));
+	strcat(buffer, " ");
+	strcat(buffer, ftoa(f5, g_ADCValue3, 3));
+
 	strcat(buffer, "\n");
 
 	if (strcmp(prev_buffer, buffer) != 0) {
@@ -1255,8 +1286,8 @@ static void MX_I2C1_Init(void) {
 
 	I2cHandle.Instance = I2C1;
 
-	// I2C timing configuration tool for STM32F3xx and STM32F0xx microcontrollers (AN4235)
-	//http://www.st.com/en/embedded-software/stsw-stm32126.html
+// I2C timing configuration tool for STM32F3xx and STM32F0xx microcontrollers (AN4235)
+//http://www.st.com/en/embedded-software/stsw-stm32126.html
 	I2cHandle.Init.Timing = 0x0010020A;
 
 	I2cHandle.Init.OwnAddress1 = 0;
@@ -1354,10 +1385,8 @@ static void MX_TIM1_Init(void) {
 
 }
 
-
 /* TIM3 init function */
 static void MX_TIM3_Init(void) {
-
 
 	TIM_Encoder_InitTypeDef sConfig;
 	TIM_MasterConfigTypeDef sMasterConfig;
