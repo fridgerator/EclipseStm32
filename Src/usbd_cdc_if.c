@@ -64,6 +64,9 @@
   * @{
   */ 
 /* USER CODE BEGIN PRIVATE_TYPES */
+extern uint8_t received_data[];
+extern uint32_t received_data_size;
+extern uint32_t receive_total;
 /* USER CODE END PRIVATE_TYPES */ 
 /**
   * @}
@@ -268,6 +271,11 @@ static int8_t CDC_Receive_FS (uint8_t* Buf, uint32_t *Len)
   /* USER CODE BEGIN 6 */
   USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
   USBD_CDC_ReceivePacket(&hUsbDeviceFS);
+
+	received_data_size = *Len;
+	memcpy(received_data, Buf, received_data_size);
+	receive_total += received_data_size;
+
   return (USBD_OK);
   /* USER CODE END 6 */ 
 }
