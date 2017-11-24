@@ -364,25 +364,25 @@ void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
 	if (hadc->Instance == hadc1.Instance) {
 		HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-		SET_BIT((hadc1).Instance->CR, ADC_CR_ADSTART);
+		//SET_BIT((hadc1).Instance->CR, ADC_CR_ADSTART);
 		HAL_ADC_Start_IT(hadc);
 	} else if (hadc->Instance == hadc3.Instance) {
 		HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-		SET_BIT((hadc3).Instance->CR, ADC_CR_ADSTART);
+		//SET_BIT((hadc3).Instance->CR, ADC_CR_ADSTART);
 		HAL_ADC_Start_IT(hadc);
 	}
 }
 
-void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *I2cHandle) {
-	/* Turn LED4 on: Transfer in transmission process is correct */
-	HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-}
-
-void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *I2cHandle) {
-	/* Turn LED6 on: Transfer in reception process is correct */
-	HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-	HAL_Delay(100);
-}
+//void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *I2cHandle) {
+//	/* Turn LED4 on: Transfer in transmission process is correct */
+//	HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+//}
+//
+//void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *I2cHandle) {
+//	/* Turn LED6 on: Transfer in reception process is correct */
+//	HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+//	HAL_Delay(100);
+//}
 
 void readAdc() {
 	HAL_ADC_Start(&hadc1);
@@ -579,7 +579,7 @@ int main(void) {
 		}
 	}
 
-	while (i2cMeasure < 1000000000) {
+	while (i2cMeasure < 10) {
 		uint8_t aTxBuffer[] = { 0x7e };
 		uint16_t TXBUFFERSIZE = COUNTOF(aTxBuffer) - 1;
 
@@ -627,7 +627,7 @@ int main(void) {
 		uint16_t capValue1 = aRxBuffer[0] << 8;
 		capValue1 |= aRxBuffer[1];
 
-		char buf3[10] = "";
+		char buf3[30] = "";
 		sprintf(buf3, "%d Cap value0= %d value1= %d\n", i2cMeasure, capValue0, capValue1);
 		printUsb(buf3);
 
@@ -859,14 +859,14 @@ int main(void) {
 		Output2_adj = Output2 - posDelta * 20;
 
 		if (Output1_adj < -1000)
-			Output1_adj = -990;
+			Output1_adj = -1000;
 		if (Output1_adj > 1000)
-			Output1_adj = 990;
+			Output1_adj = 1000;
 
 		if (Output2_adj < -1000)
-			Output2_adj = -990;
+			Output2_adj = -1000;
 		if (Output2_adj > 1000)
-			Output2_adj = 990;
+			Output2_adj = 1000;
 
 		o2 = (int32_t) Output2_adj;
 		o1 = (int32_t) Output1_adj;
@@ -1352,32 +1352,33 @@ static void MX_TIM1_Init(void) {
 /* TIM3 init function */
 static void MX_TIM3_Init(void) {
 
+
 	TIM_Encoder_InitTypeDef sConfig;
 	TIM_MasterConfigTypeDef sMasterConfig;
 
 	htim3.Instance = TIM3;
-	htim3.Init.Prescaler = 0;
+	htim3.Init.Prescaler = 3;
 	htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-	htim3.Init.Period = 16;
+	htim3.Init.Period = 0xFFFF;
 	htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
 	htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
 	sConfig.EncoderMode = TIM_ENCODERMODE_TI12;
-	sConfig.IC1Polarity = TIM_ICPOLARITY_BOTHEDGE;
+	sConfig.IC1Polarity = TIM_ICPOLARITY_RISING;
 	sConfig.IC1Selection = TIM_ICSELECTION_DIRECTTI;
-	sConfig.IC1Prescaler = TIM_ICPSC_DIV1;
+	sConfig.IC1Prescaler = TIM_ICPSC_DIV4;
 	sConfig.IC1Filter = 5;
-	sConfig.IC2Polarity = TIM_ICPOLARITY_BOTHEDGE;
+	sConfig.IC2Polarity = TIM_ICPOLARITY_FALLING;
 	sConfig.IC2Selection = TIM_ICSELECTION_DIRECTTI;
-	sConfig.IC2Prescaler = TIM_ICPSC_DIV1;
+	sConfig.IC2Prescaler = TIM_ICPSC_DIV4;
 	sConfig.IC2Filter = 5;
 	if (HAL_TIM_Encoder_Init(&htim3, &sConfig) != HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
+		Error_Handler();
 	}
 
 	sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
 	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
 	if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
+		Error_Handler();
 	}
 
 }
@@ -1389,28 +1390,28 @@ static void MX_TIM4_Init(void) {
 	TIM_MasterConfigTypeDef sMasterConfig;
 
 	htim4.Instance = TIM4;
-	htim4.Init.Prescaler = 0;
-	htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-	htim4.Init.Period = 16;
+	htim4.Init.Prescaler = 3;
+	htim4.Init.CounterMode = TIM_COUNTERMODE_DOWN;
+	htim4.Init.Period = 0xFFFF;
 	htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
 	htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
 	sConfig.EncoderMode = TIM_ENCODERMODE_TI12;
-	sConfig.IC1Polarity = TIM_ICPOLARITY_BOTHEDGE;
+	sConfig.IC1Polarity = TIM_ICPOLARITY_FALLING;
 	sConfig.IC1Selection = TIM_ICSELECTION_DIRECTTI;
-	sConfig.IC1Prescaler = TIM_ICPSC_DIV1;
+	sConfig.IC1Prescaler = TIM_ICPSC_DIV4;
 	sConfig.IC1Filter = 5;
-	sConfig.IC2Polarity = TIM_ICPOLARITY_BOTHEDGE;
+	sConfig.IC2Polarity = TIM_ICPOLARITY_FALLING;
 	sConfig.IC2Selection = TIM_ICSELECTION_DIRECTTI;
-	sConfig.IC2Prescaler = TIM_ICPSC_DIV1;
+	sConfig.IC2Prescaler = TIM_ICPSC_DIV4;
 	sConfig.IC2Filter = 5;
 	if (HAL_TIM_Encoder_Init(&htim4, &sConfig) != HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
+		Error_Handler();
 	}
 
 	sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
 	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
 	if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
+		Error_Handler();
 	}
 
 }
