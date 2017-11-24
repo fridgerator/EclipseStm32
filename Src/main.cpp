@@ -1161,6 +1161,7 @@ static void MX_ADC1_Init(void) {
 	hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIGCONV_T1_TRGO;
 	hadc1.Init.DataAlign = ADC_DATAALIGN_LEFT;
 	hadc1.Init.NbrOfConversion = 1;
+	hadc1.Init.NbrOfDiscConversion = 1;
 	hadc1.Init.DMAContinuousRequests = DISABLE;
 	hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
 	hadc1.Init.LowPowerAutoWait = DISABLE;
@@ -1182,7 +1183,7 @@ static void MX_ADC1_Init(void) {
 	sConfig.Channel = ADC_CHANNEL_1;
 	sConfig.Rank = 1;
 	sConfig.SingleDiff = ADC_SINGLE_ENDED;
-	sConfig.SamplingTime = ADC_SAMPLETIME_181CYCLES_5;
+	sConfig.SamplingTime = ADC_SAMPLETIME_2CYCLES_5;
 	sConfig.OffsetNumber = ADC_OFFSET_NONE;
 	sConfig.Offset = 0;
 	if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK) {
@@ -1209,6 +1210,7 @@ static void MX_ADC3_Init(void) {
 	hadc3.Init.ExternalTrigConv = ADC_EXTERNALTRIGCONV_T8_TRGO;
 	hadc3.Init.DataAlign = ADC_DATAALIGN_LEFT;
 	hadc3.Init.NbrOfConversion = 1;
+	hadc3.Init.NbrOfDiscConversion = 1;
 	hadc3.Init.DMAContinuousRequests = DISABLE;
 	hadc3.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
 	hadc3.Init.LowPowerAutoWait = DISABLE;
@@ -1230,7 +1232,7 @@ static void MX_ADC3_Init(void) {
 	sConfig.Channel = ADC_CHANNEL_1;
 	sConfig.Rank = 1;
 	sConfig.SingleDiff = ADC_SINGLE_ENDED;
-	sConfig.SamplingTime = ADC_SAMPLETIME_181CYCLES_5;
+	sConfig.SamplingTime = ADC_SAMPLETIME_2CYCLES_5;
 	sConfig.OffsetNumber = ADC_OFFSET_NONE;
 	sConfig.Offset = 0;
 	if (HAL_ADC_ConfigChannel(&hadc3, &sConfig) != HAL_OK) {
