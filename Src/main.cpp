@@ -64,10 +64,10 @@
 
 #define SIXSECONDS (6*1000L) // three seconds are 3000 milliseconds
 #define THREESECONDS (3*1000L) // three seconds are 3000 milliseconds
-const int ADC_BUFFER_LENGTH_WORDS = 1024; //32 bit words
-const int ADC_BUFFER_LENGTH = ADC_BUFFER_LENGTH_WORDS * sizeof(uint32_t);
-uint32_t DMA_ADCvalues1[ADC_BUFFER_LENGTH_WORDS];
-uint32_t DMA_ADCvalues3[ADC_BUFFER_LENGTH_WORDS];
+const int ADC_BUFFER_LENGTH_HALFWORDS = 1024; //32 bit words
+const int ADC_BUFFER_LENGTH = ADC_BUFFER_LENGTH_HALFWORDS * sizeof(uint16_t);
+uint16_t DMA_ADCvalues1[ADC_BUFFER_LENGTH_HALFWORDS];
+uint16_t DMA_ADCvalues3[ADC_BUFFER_LENGTH_HALFWORDS];
 int g_DmaOffsetBeforeAveragingF1, g_DmaOffsetAfterAveragingF1;
 int g_DmaOffsetBeforeAveragingH1, g_DmaOffsetAfterAveragingH1;
 uint32_t g_MeasurementNumber1;
@@ -375,7 +375,7 @@ void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
 		g_MeasurementNumber1 += ADC_BUFFER_LENGTH/2;
 	} else if (hadc->Instance == hadc3.Instance) {
 		g_DmaOffsetBeforeAveragingH3 = ADC_BUFFER_LENGTH - DMA2_Channel5->CNDTR;
-		g_ADCValue1 = std::accumulate(DMA_ADCvalues3, DMA_ADCvalues3 + ADC_BUFFER_LENGTH / 2, 0) / (ADC_BUFFER_LENGTH / 2);
+		g_ADCValue3 = std::accumulate(DMA_ADCvalues3, DMA_ADCvalues3 + ADC_BUFFER_LENGTH / 2, 0) / (ADC_BUFFER_LENGTH / 2);
 		g_DmaOffsetAfterAveragingH3 = ADC_BUFFER_LENGTH - DMA2_Channel5->CNDTR;
 		g_MeasurementNumber3 += ADC_BUFFER_LENGTH/2;
 	}
@@ -473,44 +473,34 @@ void readAdc() {
 	}
 }
 
-void readI2C() {
+void initI2C() {
 	long i2cMeasure = 0;
 	uint8_t aRxBuffer[2];
 
 // read chip MANUFACTURER_ID
 	uint16_t REG_CHIP_MEM_ADDR = 0x7e;
 	if (HAL_I2C_Mem_Read(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, 10000) != HAL_OK) {
-		/* Error_Handler() function is called when Timeout error occurs.
-		 When Acknowledge failure occurs (Slave don't acknowledge its address)
-		 Master restarts communication */
 		if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
 			Error_Handler();
 		}
 	}
 	uint16_t manufacturer = aRxBuffer[0] << 8;
-	manufacturer |= aRxBuffer[1];
+	manufacturer |= aRxBuffer[1];   // returns: manufacturer = 0x5449;
 
-//CH0_FREF_DIVIDER
+  //CH0_FREQ_DIVIDER
 	REG_CHIP_MEM_ADDR = 0x14;
-//uint8_t aTxBuffer[2] = { 0b00100000, 0b00000001 };
 	uint8_t aTxBuffer[2] = { (0x2001 >> 8), (0x2001 & 0xff) };
 
 	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer, 2, 10000) != HAL_OK) {
-		/* Error_Handler() function is called when Timeout error occurs.
-		 When Acknowledge failure occurs (Slave don't acknowledge its address)
-		 Master restarts communication */
 		if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
 			Error_Handler();
 		}
 	}
 
-//DRIVE_CURRENT_CH0
+  //DRIVE_CURRENT_CH0
 	REG_CHIP_MEM_ADDR = 0x1E;
 	uint8_t aTxBuffer2[2] = { (0x7C00 >> 8), (0x7C00 & 0xff) };
 	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer2, 2, 10000) != HAL_OK) {
-		/* Error_Handler() function is called when Timeout error occurs.
-		 When Acknowledge failure occurs (Slave don't acknowledge its address)
-		 Master restarts communication */
 		if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
 			Error_Handler();
 		}
@@ -520,104 +510,39 @@ void readI2C() {
 	REG_CHIP_MEM_ADDR = 0x10;
 	uint8_t aTxBuffer3[2] = { (0x000A >> 8), (0x000A & 0xff) };
 	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer3, 2, 10000) != HAL_OK) {
-		/* Error_Handler() function is called when Timeout error occurs.
-		 When Acknowledge failure occurs (Slave don't acknowledge its address)
-		 Master restarts communication */
 		if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
 			Error_Handler();
 		}
 	}
 
-//CH0_RCOUNT
+  //CH0_RCOUNT
 	REG_CHIP_MEM_ADDR = 0x08;
 	uint8_t aTxBuffer4[2] = { (0x2089 >> 8), (0x2089 & 0xff) };
 	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer4, 2, 10000) != HAL_OK) {
-		/* Error_Handler() function is called when Timeout error occurs.
-		 When Acknowledge failure occurs (Slave don't acknowledge its address)
-		 Master restarts communication */
 		if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
 			Error_Handler();
 		}
 	}
 
-//MUX_CONFIG
+  //MUX_CONFIG
 	REG_CHIP_MEM_ADDR = 0x1B;
 	uint8_t aTxBuffer5[2] = { (0xC20D >> 8), (0xC20D & 0xff) };
 	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer5, 2, 10000) != HAL_OK) {
-		/* Error_Handler() function is called when Timeout error occurs.
-		 When Acknowledge failure occurs (Slave don't acknowledge its address)
-		 Master restarts communication */
 		if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
 			Error_Handler();
 		}
 	}
 
-//CONFIG
+  //CONFIG
 	REG_CHIP_MEM_ADDR = 0x1A;
 	uint8_t aTxBuffer6[2] = { (0x1601 >> 8), (0x1601 & 0xff) };
 	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer6, 2, 10000) != HAL_OK) {
-		/* Error_Handler() function is called when Timeout error occurs.
-		 When Acknowledge failure occurs (Slave don't acknowledge its address)
-		 Master restarts communication */
 		if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
 			Error_Handler();
 		}
 	}
 
-	while (i2cMeasure < 10) {
-		uint8_t aTxBuffer[] = { 0x7e };
-		uint16_t TXBUFFERSIZE = COUNTOF(aTxBuffer) - 1;
 
-		// READ STATUS
-		uint16_t REG_CHIP_MEM_ADDR = 0x18;
-		if (HAL_I2C_Mem_Read(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, 10000) != HAL_OK) {
-			/* Error_Handler() function is called when Timeout error occurs.
-			 When Acknowledge failure occurs (Slave don't acknowledge its address)
-			 Master restarts communication */
-			if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
-				Error_Handler();
-			}
-		}
-		uint16_t status = aRxBuffer[0] << 8;
-		status |= aRxBuffer[1];
-
-		if (status & (1 << 4)) //5th bit is on
-				{
-			//DRDY
-
-		}
-
-		REG_CHIP_MEM_ADDR = 0x00;
-		if (HAL_I2C_Mem_Read(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, 10000) != HAL_OK) {
-			/* Error_Handler() function is called when Timeout error occurs.
-			 When Acknowledge failure occurs (Slave don't acknowledge its address)
-			 Master restarts communication */
-			if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
-				Error_Handler();
-			}
-		}
-		uint16_t capValue0 = aRxBuffer[0] << 8;
-		capValue0 |= aRxBuffer[1];
-
-		REG_CHIP_MEM_ADDR = 0x01;
-		if (HAL_I2C_Mem_Read(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, 10000) != HAL_OK) {
-			/* Error_Handler() function is called when Timeout error occurs.
-			 When Acknowledge failure occurs (Slave don't acknowledge its address)
-			 Master restarts communication */
-			if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
-				Error_Handler();
-			}
-		}
-		uint16_t capValue1 = aRxBuffer[0] << 8;
-		capValue1 |= aRxBuffer[1];
-
-		char buf3[30] = "";
-		sprintf(buf3, "%d Cap value0= %d value1= %d\n", i2cMeasure, capValue0, capValue1);
-		printUsb(buf3);
-
-		i2cMeasure++;
-
-	}
 
 }
 /* USER CODE END 0 */
@@ -666,7 +591,6 @@ int main(void) {
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
 
-//readI2C();
 	HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1); //starts PWM on CH1N pin
 	HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2); //starts PWM on CH2N pin
 
@@ -690,16 +614,19 @@ int main(void) {
 	myPID1.SetAccelerationLimits(-0.5, 0.5);
 	myPID2.SetAccelerationLimits(-0.5, 0.5);
 
+	initI2C();
+
+
 	HAL_TIM_Base_Start_IT(&htim1);
 	HAL_TIM_Base_Start_IT(&htim8);
 
 	HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
 	HAL_ADCEx_Calibration_Start(&hadc3, ADC_SINGLE_ENDED);
 
-	if (HAL_ADC_Start_DMA(&hadc1, (uint32_t *) DMA_ADCvalues1, 1024) != HAL_OK) {
+	if (HAL_ADC_Start_DMA(&hadc1, (uint32_t *) DMA_ADCvalues1, ADC_BUFFER_LENGTH_HALFWORDS) != HAL_OK) {
 		Error_Handler();
 	}
-	if (HAL_ADC_Start_DMA(&hadc3, (uint32_t *) DMA_ADCvalues3, 1024) != HAL_OK) {
+	if (HAL_ADC_Start_DMA(&hadc3, (uint32_t *) DMA_ADCvalues3, ADC_BUFFER_LENGTH_HALFWORDS) != HAL_OK) {
 		Error_Handler();
 	}
 
@@ -753,8 +680,58 @@ int main(void) {
 		HAL_Delay(50);
 	}
 
+	int i2cMeasure=0;
+	uint8_t aRxBuffer[2];
 	while (1) {
-		/* USER CODE END WHILE */
+
+
+		while (i2cMeasure < 2) {
+			uint8_t aTxBuffer[] = { 0x7e };
+			uint16_t TXBUFFERSIZE = COUNTOF(aTxBuffer) - 1;
+
+			// READ STATUS
+			uint16_t REG_CHIP_MEM_ADDR = 0x18;
+			if (HAL_I2C_Mem_Read(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, 10000) != HAL_OK) {
+				if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
+					Error_Handler();
+				}
+			}
+			uint16_t status = aRxBuffer[0] << 8;
+			status |= aRxBuffer[1];
+
+			if (status & (1 << 4)) //5th bit is on
+					{
+				//DRDY
+
+			}
+
+			//DATA_CH0
+			REG_CHIP_MEM_ADDR = 0x00;
+			if (HAL_I2C_Mem_Read(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, 10000) != HAL_OK) {
+				if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
+					Error_Handler();
+				}
+			}
+			uint16_t capValue0 = aRxBuffer[0] << 8;
+			capValue0 |= aRxBuffer[1];
+
+			//DATA_LSB_CH0
+			REG_CHIP_MEM_ADDR = 0x01;
+			if (HAL_I2C_Mem_Read(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, 10000) != HAL_OK) {
+				if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
+					Error_Handler();
+				}
+			}
+			uint16_t capValue1 = aRxBuffer[0] << 8;
+			capValue1 |= aRxBuffer[1];
+
+			char buf3[30] = "";
+			sprintf(buf3, "%d Cap value0= %d value1= %d\n", i2cMeasure, capValue0, capValue1);
+			printUsb(buf3);
+
+			i2cMeasure++;
+
+		}
 
 		/* USER CODE BEGIN 3 */
 		i++;
@@ -1220,7 +1197,7 @@ static void MX_ADC1_Init(void) {
 	sConfig.Channel = ADC_CHANNEL_1;
 	sConfig.Rank = 1;
 	sConfig.SingleDiff = ADC_SINGLE_ENDED;
-	sConfig.SamplingTime = ADC_SAMPLETIME_2CYCLES_5;
+	sConfig.SamplingTime = ADC_SAMPLETIME_7CYCLES_5; //ADC_SAMPLETIME_2CYCLES_5;
 	sConfig.OffsetNumber = ADC_OFFSET_NONE;
 	sConfig.Offset = 0;
 	if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK) {
@@ -1269,7 +1246,7 @@ static void MX_ADC3_Init(void) {
 	sConfig.Channel = ADC_CHANNEL_1;
 	sConfig.Rank = 1;
 	sConfig.SingleDiff = ADC_SINGLE_ENDED;
-	sConfig.SamplingTime = ADC_SAMPLETIME_2CYCLES_5;
+	sConfig.SamplingTime = ADC_SAMPLETIME_7CYCLES_5; //ADC_SAMPLETIME_2CYCLES_5;
 	sConfig.OffsetNumber = ADC_OFFSET_NONE;
 	sConfig.Offset = 0;
 	if (HAL_ADC_ConfigChannel(&hadc3, &sConfig) != HAL_OK) {
