@@ -708,8 +708,6 @@ int main(void) {
 
 			if (status & (1 << 4)) //5th bit is on
 					{
-				//DRDY
-
 			}
 
 			//DATA_CH0
@@ -734,10 +732,8 @@ int main(void) {
 
 			char buf3[30] = "";
 			sprintf(buf3, "%d Cap value0= %d value1= %d\n", i2cMeasure, capValue0, capValue1);
-			//printUsb(buf3);
 
 			i2cMeasure++;
-
 		}
 
 		/* USER CODE BEGIN 3 */
@@ -762,19 +758,24 @@ int main(void) {
 		if (cnt_10sec != prevCnt_10sec) {
 			ocda_cnt[cnt_10sec] = 0;
 			ocdb_cnt[cnt_10sec] = 0;
+			prevCnt_10sec = cnt_10sec;
 		}
 		if (ocda == 1)
 			ocda_cnt[cnt_10sec]++;
 		if (ocdb == 1)
 			ocdb_cnt[cnt_10sec]++;
 
-		if (ocda_cnt[cnt_10sec] > 3 || ocdb_cnt[cnt_10sec] > 3) {
+		// if we get 500 over current counts within one second on left or right motor we stop whole thing
+		// it seems motor are stucked
+		// we end program
+		// and signal with blinking led
+		if (ocda_cnt[cnt_10sec] > 500 || ocdb_cnt[cnt_10sec] > 500) {
 			sprintf(buffer, "Resetted. %d %d\n", ocda_cnt[cnt_10sec], ocdb_cnt[cnt_10sec]);
 			printUsb(buffer);
 			fastStop();
-			myDelay(10000);
 			while (true) {
-				__WFI();
+				if (((float) HAL_GetTick() / 1000) % 2 == 0)
+					HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
 			}
 		}
 
