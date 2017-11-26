@@ -641,6 +641,25 @@ int main(void) {
 	myPID2.SetAccelerationLimits(-0.5, 0.5);
 
 	initi2c2();
+	uint8_t aRxBuffer[2];
+
+	uint16_t REG_CHIP_MEM_ADDR = 0x7e;
+	if (HAL_I2C_Mem_Read(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, 10000) != HAL_OK) {
+		if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
+			Error_Handler();
+		}
+	}
+	uint16_t manufacturer = aRxBuffer[0] << 8;
+	manufacturer |= aRxBuffer[1];   // returns: manufacturer = 0x5449;
+
+	int i2cMeasure = 0;
+	while (i2cMeasure < 100000) {
+		char buf15[20];
+		long capValue = capSense.getReading();
+		sprintf(buf15, "Cap value0= %d value1= %lu\n", i2cMeasure, capValue);
+		printUsb(buf15);
+		i2cMeasure++;
+	}
 
 	HAL_TIM_Base_Start_IT(&htim1);
 	HAL_TIM_Base_Start_IT(&htim8);
@@ -679,31 +698,10 @@ int main(void) {
 		myDelay(100);
 	}
 
-	int i2cMeasure = 0;
-	uint8_t aRxBuffer[2];
-
 	int cnt_10sec = 0;
 	int prevCnt_10sec = 0;
 
 	while (1) {
-
-		uint16_t REG_CHIP_MEM_ADDR = 0x7e;
-		if (HAL_I2C_Mem_Read(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, 10000) != HAL_OK) {
-			if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
-				Error_Handler();
-			}
-		}
-		uint16_t manufacturer = aRxBuffer[0] << 8;
-		manufacturer |= aRxBuffer[1];   // returns: manufacturer = 0x5449;
-
-		while (i2cMeasure < 100000) {
-			char buf15[20];
-			long capValue = capSense.getReading();
-			sprintf(buf15, "Cap value0= %d value1= %lu\n", i2cMeasure, capValue);
-			printUsb(buf15);
-			i2cMeasure++;
-			HAL_Delay(1000);
-		}
 
 		/* USER CODE BEGIN 3 */
 		i++;

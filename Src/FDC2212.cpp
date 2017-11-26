@@ -56,19 +56,19 @@ void FDC2212::loadSettings(void) {
 	//reset device
 	write16FDC(FDC2212_RESET_DEV, 0b1000000000000000);  //set config
 
-	//0b00 0001                                         RESERVED
-	//0b0 [00 0001]                                     Normal current drive (auto scan is enabled)
-	//0b0 [0] [00 0001]                                 Disable interrupt pin
-	//0b0 [0] [0] [00 0001]                             RESERVED
-	//0b1 [1] [0] [0] [00 0001]                         Use internal oscilator
-	//0b1 [1] [0] [0] [0] [00 0001]                     RESERVED
-	//0b0 [0] [1] [0] [0] [0] [00 0001]                 Full current mode
-	//0b1 [1] [0] [1] [0] [0] [0] [00 0001]             RESERVED
-	//0b0 [1] [1] [0] [1] [0] [0] [0] [00 0001]         no sleep
-	//0b00 [0] [1] [1] [0] [1] [0] [0] [0] [00 0001]    Contineous reads on CH0
-	//0b 0 1 1 0 1 0 0 0 00 0001 aka 0x1E81
+	//0b00  00 0001                                         RESERVED
+	//0b0   0 00 0001                                   Normal current drive (auto scan is enabled)
+	//0b0   0 0 00 0001                               Disable interrupt pin
+	//0b0   0 0 0 00 0001                             RESERVED
+	//0b0   0 0 0 0 00 0001                         Use internal oscilator
+	//0b1   1 0 0 0 0 00 0001                     RESERVED
+	//0b0   0 1 0 0 0 0 00 0001                 full current mode
+	//0b1   1 0 1 0 0 0 0 00 0001             RESERVED
+	//0b0   0 1 0 1 0 0 0 0 00 0001      device is active - no sleep
+	//0b00 00 0 1 0 1 0 0 0 0 00 0001    Contineous reads on CH0
 
-	write16FDC(FDC2212_CONFIG_REGADDR, 0b01101100000001);  //set config
+
+	write16FDC(FDC2212_CONFIG_REGADDR, 0b0001010000000001);  //set config
 	//write16FDC(FDC2212_CONFIG_REGADDR, 0x1E81);  //set config
 //    write16FDC(FDC2214_CONFIG_REGADDR, 0x201);  //set config
 
@@ -91,14 +91,15 @@ void FDC2212::loadSettings(void) {
 
 	//set drive register
 	//write16FDC(FDC2212_DRIVE_CH0_REGADDR, 0xF800);
-	write16FDC(FDC2212_DRIVE_CH0_REGADDR, 0b00010);
+	write16FDC(FDC2212_DRIVE_CH0_REGADDR, 0b0111100000000000);
 
 	// 0b101                            Deglitch 10MHz, oscilation is ~4MHz by default
-	// 0b00 0100 0001 [101]             RESERVED
+	// 0b00 000100 0001 [101]             RESERVED
 	// 0b00 [00 0100 0001] [101]        Sequence unused only read on CH0 using CONFIG.ACTIVE_CHAN
-	// 0b0 [00] [00 0100 0001] [101]    Enable autoscan
+	// 0b0 [00] [00 0100 0001] [101x]    Enable autoscan
 	// 0b0000 0010 0000 1101 aka 0x020D
-	write16FDC(FDC2212_MUX_CONFIG_REGADDR, 0x020D);  //set mux config for channels
+	//write16FDC(FDC2212_MUX_CONFIG_REGADDR, 0x020D);  //set mux config for channels
+	write16FDC(FDC2212_MUX_CONFIG_REGADDR, 0b000001000001101);  //set mux config for channels
 
 	// set warnings
 	// 0b1    											1										report data ready flag
@@ -110,7 +111,7 @@ void FDC2212::loadSettings(void) {
 	// 0b0 			 0 1 1 00000 1 0000 1										disable watchdog timeout error
 	// 0b00 	00 0 1 1 00000 1 0000 1										RESERVED
 
-	write16FDC(FDC2212_ERROR_CONFIG, 0b0001100000100001);  //set mux config for channels
+	write16FDC(FDC2212_ERROR_CONFIG, 0b0001100000100001);  //set error config
 
 }
 
