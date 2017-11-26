@@ -64,6 +64,7 @@
 
 #define SIXSECONDS (6*1000L) // three seconds are 3000 milliseconds
 #define THREESECONDS (3*1000L) // three seconds are 3000 milliseconds
+#define ONESECOND (1*1000L) // one second is 1000 milliseconds
 const int ADC_BUFFER_LENGTH_HALFWORDS = 1024; //32 bit words
 const int ADC_BUFFER_LENGTH = ADC_BUFFER_LENGTH_HALFWORDS * sizeof(uint16_t);
 uint16_t DMA_ADCvalues1[ADC_BUFFER_LENGTH_HALFWORDS];
@@ -74,6 +75,9 @@ uint32_t g_MeasurementNumber1;
 int g_DmaOffsetBeforeAveragingF3, g_DmaOffsetAfterAveragingF3;
 int g_DmaOffsetBeforeAveragingH3, g_DmaOffsetAfterAveragingH3;
 uint32_t g_MeasurementNumber3;
+
+uint16_t ocda_cnt[10];
+uint16_t ocdb_cnt[10];
 
 /* Exported macro ------------------------------------------------------------*/
 #define COUNTOF(__BUFFER__)   (sizeof(__BUFFER__) / sizeof(*(__BUFFER__)))
@@ -163,8 +167,8 @@ float pwm1 = 0;
 float pwm2 = 0;
 float dPwm = 0.01;
 
-char buffer[255] = { "" };
-char prev_buffer[255] = { "" };
+char buffer[280] = { "" };
+char prev_buffer[280] = { "" };
 
 static union { // This Data structure lets
 	uint8_t asBytes[24]; // us take the byte array
@@ -321,7 +325,7 @@ void resetPwm(uint32_t i) {
 
 // t_reset = 8us for BTM7752Gb
 	sprintf(buffer, "%lu Resetted.\n\r", i);
-	printUsb(buffer);
+	//printUsb(buffer);
 	alreadyResetted = 1;
 }
 
@@ -370,39 +374,42 @@ uint32_t RTC_ReadBackupRegister(uint32_t RTC_BKP_DR) {
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
 	if (hadc->Instance == hadc1.Instance) {
 		g_DmaOffsetBeforeAveragingH1 = ADC_BUFFER_LENGTH - DMA1_Channel1->CNDTR;
-		g_ADCValue1 = std::accumulate(DMA_ADCvalues1, DMA_ADCvalues1 + ADC_BUFFER_LENGTH / 2, 0) / (ADC_BUFFER_LENGTH / 2);
+		g_ADCValue1 = (float) std::accumulate(DMA_ADCvalues1, DMA_ADCvalues1 + ADC_BUFFER_LENGTH / 2, 0) / (ADC_BUFFER_LENGTH / 2);
 		g_DmaOffsetAfterAveragingH1 = ADC_BUFFER_LENGTH - DMA1_Channel1->CNDTR;
-		g_MeasurementNumber1 += ADC_BUFFER_LENGTH/2;
+		g_MeasurementNumber1 += ADC_BUFFER_LENGTH / 2;
 	} else if (hadc->Instance == hadc3.Instance) {
 		g_DmaOffsetBeforeAveragingH3 = ADC_BUFFER_LENGTH - DMA2_Channel5->CNDTR;
-		g_ADCValue3 = std::accumulate(DMA_ADCvalues3, DMA_ADCvalues3 + ADC_BUFFER_LENGTH / 2, 0) / (ADC_BUFFER_LENGTH / 2);
+		g_ADCValue3 = (float) std::accumulate(DMA_ADCvalues3, DMA_ADCvalues3 + ADC_BUFFER_LENGTH / 2, 0) / (ADC_BUFFER_LENGTH / 2);
 		g_DmaOffsetAfterAveragingH3 = ADC_BUFFER_LENGTH - DMA2_Channel5->CNDTR;
-		g_MeasurementNumber3 += ADC_BUFFER_LENGTH/2;
+		g_MeasurementNumber3 += ADC_BUFFER_LENGTH / 2;
 	}
 	g_ADCValue = MAX(g_ADCValue3, g_ADCValue1);
-	if(DMA_ADCvalues1[0]>0 || DMA_ADCvalues3[0]>0)
-	{
-		asm("nop");
-	}
 	HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
 	HAL_ADC_Start_IT(hadc);
+	if (DMA_ADCvalues1[0] > 0 || DMA_ADCvalues3[0] > 0) {
+		asm("nop");
+	}
 }
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
 	if (hadc->Instance == hadc1.Instance) {
 		g_DmaOffsetBeforeAveragingF1 = ADC_BUFFER_LENGTH - DMA1_Channel1->CNDTR;
-		g_ADCValue1 = std::accumulate(DMA_ADCvalues1 + ADC_BUFFER_LENGTH / 2, DMA_ADCvalues1 + ADC_BUFFER_LENGTH, 0) / (ADC_BUFFER_LENGTH / 2);
+		g_ADCValue1 = (float) std::accumulate(DMA_ADCvalues1 + ADC_BUFFER_LENGTH / 2, DMA_ADCvalues1 + ADC_BUFFER_LENGTH, 0) / (ADC_BUFFER_LENGTH / 2);
 		g_DmaOffsetAfterAveragingF1 = ADC_BUFFER_LENGTH - DMA1_Channel1->CNDTR;
-		g_MeasurementNumber1 += ADC_BUFFER_LENGTH/2;
+		g_MeasurementNumber1 += ADC_BUFFER_LENGTH / 2;
 	} else if (hadc->Instance == hadc3.Instance) {
 		g_DmaOffsetBeforeAveragingF3 = ADC_BUFFER_LENGTH - DMA2_Channel5->CNDTR;
-		g_ADCValue3 = std::accumulate(DMA_ADCvalues3 + ADC_BUFFER_LENGTH / 2, DMA_ADCvalues3 + ADC_BUFFER_LENGTH, 0) / (ADC_BUFFER_LENGTH / 2);
+		g_ADCValue3 = (float) std::accumulate(DMA_ADCvalues3 + ADC_BUFFER_LENGTH / 2, DMA_ADCvalues3 + ADC_BUFFER_LENGTH, 0) / (ADC_BUFFER_LENGTH / 2);
 		g_DmaOffsetAfterAveragingF3 = ADC_BUFFER_LENGTH - DMA2_Channel5->CNDTR;
-		g_MeasurementNumber3 += ADC_BUFFER_LENGTH/2;
+		g_MeasurementNumber3 += ADC_BUFFER_LENGTH / 2;
 	}
 	g_ADCValue = MAX(g_ADCValue3, g_ADCValue1);
 	HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
 	HAL_ADC_Start_IT(hadc);
+	if (DMA_ADCvalues1[0] > 0 || DMA_ADCvalues3[0] > 0) {
+		asm("nop");
+	}
+
 }
 
 //void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *I2cHandle) {
@@ -442,13 +449,13 @@ void readAdc() {
 					g_ADCValue = MAX(g_ADCValue3, g_ADCValue1);
 					if (g_ADCValue > g_ADCValue_threshold && safeMode) {
 						emergencyStopTimes++;
-						printUsb("Triggered\n");
+						//printUsb("Triggered\n");
 						char f1[10];
 						char f3[10];
 						ftoa(f1, g_ADCValue3, 3);
 						ftoa(f3, g_ADCValue1, 3);
 						sprintf(buffer, "ADC1: %s   ADC2:%s\n", f1, f3);
-						printUsb(buffer);
+						//printUsb(buffer);
 
 						fastStop();
 						resetPwm(i);
@@ -487,7 +494,7 @@ void initI2C() {
 	uint16_t manufacturer = aRxBuffer[0] << 8;
 	manufacturer |= aRxBuffer[1];   // returns: manufacturer = 0x5449;
 
-  //CH0_FREQ_DIVIDER
+	//CH0_FREQ_DIVIDER
 	REG_CHIP_MEM_ADDR = 0x14;
 	uint8_t aTxBuffer[2] = { (0x2001 >> 8), (0x2001 & 0xff) };
 
@@ -497,7 +504,7 @@ void initI2C() {
 		}
 	}
 
-  //DRIVE_CURRENT_CH0
+	//DRIVE_CURRENT_CH0
 	REG_CHIP_MEM_ADDR = 0x1E;
 	uint8_t aTxBuffer2[2] = { (0x7C00 >> 8), (0x7C00 & 0xff) };
 	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer2, 2, 10000) != HAL_OK) {
@@ -515,7 +522,7 @@ void initI2C() {
 		}
 	}
 
-  //CH0_RCOUNT
+	//CH0_RCOUNT
 	REG_CHIP_MEM_ADDR = 0x08;
 	uint8_t aTxBuffer4[2] = { (0x2089 >> 8), (0x2089 & 0xff) };
 	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer4, 2, 10000) != HAL_OK) {
@@ -524,7 +531,7 @@ void initI2C() {
 		}
 	}
 
-  //MUX_CONFIG
+	//MUX_CONFIG
 	REG_CHIP_MEM_ADDR = 0x1B;
 	uint8_t aTxBuffer5[2] = { (0xC20D >> 8), (0xC20D & 0xff) };
 	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer5, 2, 10000) != HAL_OK) {
@@ -533,7 +540,7 @@ void initI2C() {
 		}
 	}
 
-  //CONFIG
+	//CONFIG
 	REG_CHIP_MEM_ADDR = 0x1A;
 	uint8_t aTxBuffer6[2] = { (0x1601 >> 8), (0x1601 & 0xff) };
 	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer6, 2, 10000) != HAL_OK) {
@@ -541,8 +548,6 @@ void initI2C() {
 			Error_Handler();
 		}
 	}
-
-
 
 }
 /* USER CODE END 0 */
@@ -616,7 +621,6 @@ int main(void) {
 
 	initI2C();
 
-
 	HAL_TIM_Base_Start_IT(&htim1);
 	HAL_TIM_Base_Start_IT(&htim8);
 
@@ -680,10 +684,13 @@ int main(void) {
 		HAL_Delay(50);
 	}
 
-	int i2cMeasure=0;
+	int i2cMeasure = 0;
 	uint8_t aRxBuffer[2];
-	while (1) {
 
+	int cnt_10sec = 0;
+	int prevCnt_10sec = 0;
+
+	while (1) {
 
 		while (i2cMeasure < 2) {
 			uint8_t aTxBuffer[] = { 0x7e };
@@ -727,7 +734,7 @@ int main(void) {
 
 			char buf3[30] = "";
 			sprintf(buf3, "%d Cap value0= %d value1= %d\n", i2cMeasure, capValue0, capValue1);
-			printUsb(buf3);
+			//printUsb(buf3);
 
 			i2cMeasure++;
 
@@ -736,27 +743,54 @@ int main(void) {
 		/* USER CODE BEGIN 3 */
 		i++;
 
-		g_ADCValue1 = 0;
-		g_ADCValue3 = 0;
+//		bool controlPower1 = false;
+//		if (controlPower1) {
+//			readAdc();
+//		}
 
-		bool controlPower1 = false;
-		if (controlPower1) {
-			readAdc();
+		if (HAL_GPIO_ReadPin(OCDA_GPIO_Port, OCDA_Pin) == GPIO_PIN_RESET)
+			ocda = 1;
+		else
+			ocda = 0;
+
+		if (HAL_GPIO_ReadPin(OCDB_GPIO_Port, OCDB_Pin) == GPIO_PIN_RESET)
+			ocdb = 1;
+		else
+			ocdb = 0;
+
+		int cnt_10sec = (int) ((float) HAL_GetTick() / 1000) % 10;
+		if (cnt_10sec != prevCnt_10sec) {
+			ocda_cnt[cnt_10sec] = 0;
+			ocdb_cnt[cnt_10sec] = 0;
 		}
+		if (ocda == 1)
+			ocda_cnt[cnt_10sec]++;
+		if (ocdb == 1)
+			ocdb_cnt[cnt_10sec]++;
 
-		if (HAL_GetTick() - last6seconds >= SIXSECONDS) {
-			last6seconds += SIXSECONDS; // remember the time
-			if (emergencyStopTimes >= 2) {
-				// over current happened 3 times.
-				// lets stop
-				fastStop();
-				myDelay(10000);
-				while (true) {
-					__WFI();
-				}
+		if (ocda_cnt[cnt_10sec] > 3 || ocdb_cnt[cnt_10sec] > 3) {
+			sprintf(buffer, "Resetted. %d %d\n", ocda_cnt[cnt_10sec], ocdb_cnt[cnt_10sec]);
+			printUsb(buffer);
+			fastStop();
+			myDelay(10000);
+			while (true) {
+				__WFI();
 			}
-			emergencyStopTimes = 0;
 		}
+
+//		if (HAL_GetTick() - last6seconds >= SIXSECONDS) {
+//			last6seconds += SIXSECONDS; // remember the time
+//			if (emergencyStopTimes >= 2) {
+//				// over current happened 3 times.
+//				// lets stop
+//				fastStop();
+//				myDelay(10000);
+//				while (true) {
+//					__WFI();
+//				}
+//			}
+//			emergencyStopTimes = 0;
+//		}
 
 		if (button1On == 0 && button2On == 0) {
 			if (abs(Setpoint1 - Input1) < 2)
@@ -840,15 +874,6 @@ int main(void) {
 
 		posDelta = static_cast<int>(round(Input2 - Input1));
 		if (i % 100 == 0) {  // print reasults over usb every 300ms
-			if (HAL_GPIO_ReadPin(OCDA_GPIO_Port, OCDA_Pin) == GPIO_PIN_RESET)
-				ocda = 1;
-			else
-				ocda = 0;
-
-			if (HAL_GPIO_ReadPin(OCDB_GPIO_Port, OCDB_Pin) == GPIO_PIN_RESET)
-				ocdb = 1;
-			else
-				ocdb = 0;
 
 			SerialReceive();
 			buildAndSendBuffer();
@@ -978,8 +1003,8 @@ void buildAndSendBuffer() {
 
 	strcat(buffer, " ");
 
-	char buf1[4] = "";
-	itoa(g_ADCValue, buf1, 10);
+	char buf1[10] = "";
+	ftoa(buf1, g_ADCValue / 65535 * 1000, 2);
 	strcat(buffer, buf1);
 
 	strcat(buffer, " ");
@@ -995,11 +1020,29 @@ void buildAndSendBuffer() {
 	char f4[10];
 	char f5[10];
 	strcat(buffer, " ");
-	strcat(buffer, ftoa(f4, g_ADCValue1, 3));
+	ftoa(f4, g_ADCValue1 / 65535 * 1000, 2);
+	strcat(buffer, f4);
 	strcat(buffer, " ");
-	strcat(buffer, ftoa(f5, g_ADCValue3, 3));
+	ftoa(f5, g_ADCValue3 / 65535 * 1000, 2);
+	strcat(buffer, f5);
+
+//	strcat(buffer, " ");
+//	for (int l = 0; l < 10; l++) {
+//		sprintf(buf3, "%d_", ocda_cnt[l]);
+//		strcat(buffer, buf3);
+//	}
+//
+//	strcat(buffer, " ");
+//	for (int l = 0; l < 10; l++) {
+//		sprintf(buf3, "%d_", ocdb_cnt[l]);
+//		strcat(buffer, buf3);
+//	}
 
 	strcat(buffer, "\n");
+
+	if (g_ADCValue > 0) {
+		asm("nop");
+	}
 
 	if (strcmp(prev_buffer, buffer) != 0) {
 		printUsb(buffer);
@@ -1173,7 +1216,7 @@ static void MX_ADC1_Init(void) {
 	hadc1.Init.DiscontinuousConvMode = DISABLE;
 	hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
 	hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIGCONV_T1_TRGO2;
-	hadc1.Init.DataAlign = ADC_DATAALIGN_LEFT;
+	hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
 	hadc1.Init.NbrOfConversion = 1;
 	hadc1.Init.NbrOfDiscConversion = 1;
 	hadc1.Init.DMAContinuousRequests = DISABLE;
@@ -1222,7 +1265,7 @@ static void MX_ADC3_Init(void) {
 	hadc3.Init.DiscontinuousConvMode = DISABLE;
 	hadc3.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
 	hadc3.Init.ExternalTrigConv = ADC_EXTERNALTRIGCONV_T8_TRGO2;
-	hadc3.Init.DataAlign = ADC_DATAALIGN_LEFT;
+	hadc3.Init.DataAlign = ADC_DATAALIGN_RIGHT;
 	hadc3.Init.NbrOfConversion = 1;
 	hadc3.Init.NbrOfDiscConversion = 1;
 	hadc3.Init.DMAContinuousRequests = DISABLE;
