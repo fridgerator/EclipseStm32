@@ -78,6 +78,7 @@ uint32_t g_MeasurementNumber3;
 
 uint16_t ocda_cnt[10];
 uint16_t ocdb_cnt[10];
+bool stopped=false;
 
 /* Exported macro ------------------------------------------------------------*/
 #define COUNTOF(__BUFFER__)   (sizeof(__BUFFER__) / sizeof(*(__BUFFER__)))
@@ -384,11 +385,10 @@ void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
 		g_MeasurementNumber3 += ADC_BUFFER_LENGTH / 2;
 	}
 	g_ADCValue = MAX(g_ADCValue3, g_ADCValue1);
-	HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-	HAL_ADC_Start_IT(hadc);
-	if (DMA_ADCvalues1[0] > 0 || DMA_ADCvalues3[0] > 0) {
-		asm("nop");
-	}
+	//HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+
+	if (!stopped)
+		HAL_ADC_Start_IT(hadc);
 }
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
@@ -404,12 +404,10 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
 		g_MeasurementNumber3 += ADC_BUFFER_LENGTH / 2;
 	}
 	g_ADCValue = MAX(g_ADCValue3, g_ADCValue1);
-	HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-	HAL_ADC_Start_IT(hadc);
-	if (DMA_ADCvalues1[0] > 0 || DMA_ADCvalues3[0] > 0) {
-		asm("nop");
-	}
+	//HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
 
+	if (!stopped)
+		HAL_ADC_Start_IT(hadc);
 }
 
 //void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *I2cHandle) {
@@ -494,7 +492,7 @@ void initI2C() {
 	uint16_t manufacturer = aRxBuffer[0] << 8;
 	manufacturer |= aRxBuffer[1];   // returns: manufacturer = 0x5449;
 
-	//CH0_FREQ_DIVIDER
+//CH0_FREQ_DIVIDER
 	REG_CHIP_MEM_ADDR = 0x14;
 	uint8_t aTxBuffer[2] = { (0x2001 >> 8), (0x2001 & 0xff) };
 
@@ -504,7 +502,7 @@ void initI2C() {
 		}
 	}
 
-	//DRIVE_CURRENT_CH0
+//DRIVE_CURRENT_CH0
 	REG_CHIP_MEM_ADDR = 0x1E;
 	uint8_t aTxBuffer2[2] = { (0x7C00 >> 8), (0x7C00 & 0xff) };
 	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer2, 2, 10000) != HAL_OK) {
@@ -522,7 +520,7 @@ void initI2C() {
 		}
 	}
 
-	//CH0_RCOUNT
+//CH0_RCOUNT
 	REG_CHIP_MEM_ADDR = 0x08;
 	uint8_t aTxBuffer4[2] = { (0x2089 >> 8), (0x2089 & 0xff) };
 	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer4, 2, 10000) != HAL_OK) {
@@ -531,7 +529,7 @@ void initI2C() {
 		}
 	}
 
-	//MUX_CONFIG
+//MUX_CONFIG
 	REG_CHIP_MEM_ADDR = 0x1B;
 	uint8_t aTxBuffer5[2] = { (0xC20D >> 8), (0xC20D & 0xff) };
 	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer5, 2, 10000) != HAL_OK) {
@@ -540,7 +538,7 @@ void initI2C() {
 		}
 	}
 
-	//CONFIG
+//CONFIG
 	REG_CHIP_MEM_ADDR = 0x1A;
 	uint8_t aTxBuffer6[2] = { (0x1601 >> 8), (0x1601 & 0xff) };
 	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer6, 2, 10000) != HAL_OK) {
@@ -769,12 +767,13 @@ int main(void) {
 		// it seems motor are stucked
 		// we end program
 		// and signal with blinking led
-		if (ocda_cnt[cnt_10sec] > 500 || ocdb_cnt[cnt_10sec] > 500) {
+		if (ocda_cnt[cnt_10sec] > 1000 || ocdb_cnt[cnt_10sec] > 1000) {
 			sprintf(buffer, "Resetted. %d %d\n", ocda_cnt[cnt_10sec], ocdb_cnt[cnt_10sec]);
 			printUsb(buffer);
 			fastStop();
+			stopped = true;
 			while (true) {
-				if (((float) HAL_GetTick() / 1000) % 2 == 0)
+				if ((int) ((float) HAL_GetTick() / 1000) % 2 == 0)
 					HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
 			}
 		}
