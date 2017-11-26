@@ -57,6 +57,7 @@
 /* USER CODE BEGIN Includes */
 
 #include "PID_v1.h"
+#include "FDC2212.h"
 #include "../Drivers/STM32F3xx_HAL_Driver/Inc/Legacy/stm32_hal_legacy.h"
 #include "stm32f303xc.h"
 #include "math.h"
@@ -78,7 +79,7 @@ uint32_t g_MeasurementNumber3;
 
 uint16_t ocda_cnt[10];
 uint16_t ocdb_cnt[10];
-bool stopped=false;
+bool stopped = false;
 
 /* Exported macro ------------------------------------------------------------*/
 #define COUNTOF(__BUFFER__)   (sizeof(__BUFFER__) / sizeof(*(__BUFFER__)))
@@ -103,6 +104,20 @@ TIM_HandleTypeDef htim8;
 //I2C Address selection pin: when  ADDR=L, I2C address = 0x2A, when ADDR=H, I2C address = 0x2B.
 I2C_HandleTypeDef I2cHandle;
 #define I2C_ADDRESS (0x2A<<1)
+//bitmasks
+#define FDC2212_CH0_UNREADCONV 0x08         //denotes unread CH0 reading in STATUS register
+//registers
+#define FDC2212_DEVICE_ID_REGADDR           0x7F
+#define FDC2212_MUX_CONFIG_REGADDR          0x1B
+#define FDC2212_CONFIG_REGADDR              0x1A
+#define FDC2212_SETTLECOUNT_CH0_REGADDR     0x10
+#define FDC2212_RCOUNT_CH0_REGADDR          0x08
+#define FDC2212_OFFSET_CH0_REGADDR          0x0C
+#define FDC2212_CLOCK_DIVIDERS_CH0_REGADDR  0x14
+#define FDC2212_STATUS_REGADDR              0x18
+#define FDC2212_DATA_CH0_REGADDR            0x00
+#define FDC2212_DATA_LSB_CH0_REGADDR        0x01
+#define FDC2212_DRIVE_CH0_REGADDR 0x1E
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
@@ -224,12 +239,14 @@ float Output2;
 float Input2 = 32768;
 float Output1;
 
+PID1 myPID2 = PID1(&Input2, &Output2, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
+PID1 myPID1 = PID1(&Input1, &Output1, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
+
+FDC2212 capSense = FDC2212();
+
 float Output2_adj;
 float Output1_adj;
 int32_t o2, o1;
-
-PID1 myPID2 = PID1(&Input2, &Output2, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
-PID1 myPID1 = PID1(&Input1, &Output1, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
 
 int posDelta;
 uint32_t i = 0;
@@ -410,17 +427,6 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
 		HAL_ADC_Start_IT(hadc);
 }
 
-//void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *I2cHandle) {
-//	/* Turn LED4 on: Transfer in transmission process is correct */
-//	HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-//}
-//
-//void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *I2cHandle) {
-//	/* Turn LED6 on: Transfer in reception process is correct */
-//	HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-//	HAL_Delay(100);
-//}
-
 void readAdc() {
 	HAL_ADC_Start(&hadc1);
 	if (HAL_ADC_PollForConversion(&hadc1, 100000) == HAL_OK) {
@@ -476,6 +482,21 @@ void readAdc() {
 			}
 		}
 	}
+}
+
+void write16FDC(uint16_t REG_CHIP_MEM_ADDR, uint16_t value) {
+	uint8_t aTxBuffer[2] = { (value >> 8), (value & 0xff) };
+	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer, 2, 10000) != HAL_OK) {
+		if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
+			Error_Handler();
+		}
+	}
+}
+
+void initi2c2() {
+
+	capSense.begin();
+
 }
 
 void initI2C() {
@@ -587,6 +608,8 @@ int main(void) {
 	/* Initialize interrupts */
 	MX_NVIC_Init();
 
+	capSense = FDC2212(I2cHandle);
+
 	/* USER CODE BEGIN 2 */
 
 	/* USER CODE END 2 */
@@ -617,7 +640,7 @@ int main(void) {
 	myPID1.SetAccelerationLimits(-0.5, 0.5);
 	myPID2.SetAccelerationLimits(-0.5, 0.5);
 
-	initI2C();
+	initi2c2();
 
 	HAL_TIM_Base_Start_IT(&htim1);
 	HAL_TIM_Base_Start_IT(&htim8);
@@ -632,33 +655,7 @@ int main(void) {
 		Error_Handler();
 	}
 
-	/* USER CODE END 2 */
-
-	/* Infinite loop */
-	/* USER CODE BEGIN WHILE */
-
-//writeFlash();
-// write to flash is possible like this:
-//uint32_t value = readFlash(0);
-//writeFlash(0, value+1);
-//but better use RTC backup registers (16 32bit available on stm32f3)
 	uint32_t iOfStandStill = 1;
-
-	/*
-	 HAL_ADC_Start_IT(&hadc1);
-	 HAL_ADC_Start_IT(&hadc3);
-	 */
-	/*
-	 if (HAL_ADCEx_MultiModeStart_DMA(&hadc1, (uint32_t *) aADCxConvertedValues1,
-	 ADCCONVERTEDVALUES_BUFFER_SIZE) != HAL_OK) {
-	 Error_Handler();
-	 }
-
-	 if (HAL_ADCEx_MultiModeStart_DMA(&hadc3, (uint32_t *) aADCxConvertedValues3,
-	 ADCCONVERTEDVALUES_BUFFER_SIZE) != HAL_OK) {
-	 Error_Handler();
-	 }
-	 */
 
 	htim3.Instance->CNT = 32768;
 	htim4.Instance->CNT = 32768;
@@ -679,7 +676,7 @@ int main(void) {
 
 	for (int i = 0; i < 10; i++) {
 		HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-		HAL_Delay(50);
+		myDelay(100);
 	}
 
 	int i2cMeasure = 0;
@@ -690,48 +687,22 @@ int main(void) {
 
 	while (1) {
 
-		while (i2cMeasure < 2) {
-			uint8_t aTxBuffer[] = { 0x7e };
-			uint16_t TXBUFFERSIZE = COUNTOF(aTxBuffer) - 1;
-
-			// READ STATUS
-			uint16_t REG_CHIP_MEM_ADDR = 0x18;
-			if (HAL_I2C_Mem_Read(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, 10000) != HAL_OK) {
-				if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
-					Error_Handler();
-				}
+		uint16_t REG_CHIP_MEM_ADDR = 0x7e;
+		if (HAL_I2C_Mem_Read(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, 10000) != HAL_OK) {
+			if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
+				Error_Handler();
 			}
-			uint16_t status = aRxBuffer[0] << 8;
-			status |= aRxBuffer[1];
+		}
+		uint16_t manufacturer = aRxBuffer[0] << 8;
+		manufacturer |= aRxBuffer[1];   // returns: manufacturer = 0x5449;
 
-			if (status & (1 << 4)) //5th bit is on
-					{
-			}
-
-			//DATA_CH0
-			REG_CHIP_MEM_ADDR = 0x00;
-			if (HAL_I2C_Mem_Read(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, 10000) != HAL_OK) {
-				if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
-					Error_Handler();
-				}
-			}
-			uint16_t capValue0 = aRxBuffer[0] << 8;
-			capValue0 |= aRxBuffer[1];
-
-			//DATA_LSB_CH0
-			REG_CHIP_MEM_ADDR = 0x01;
-			if (HAL_I2C_Mem_Read(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, 10000) != HAL_OK) {
-				if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
-					Error_Handler();
-				}
-			}
-			uint16_t capValue1 = aRxBuffer[0] << 8;
-			capValue1 |= aRxBuffer[1];
-
-			char buf3[30] = "";
-			sprintf(buf3, "%d Cap value0= %d value1= %d\n", i2cMeasure, capValue0, capValue1);
-
+		while (i2cMeasure < 100000) {
+			char buf15[20];
+			long capValue = capSense.getReading();
+			sprintf(buf15, "Cap value0= %d value1= %lu\n", i2cMeasure, capValue);
+			printUsb(buf15);
 			i2cMeasure++;
+			HAL_Delay(1000);
 		}
 
 		/* USER CODE BEGIN 3 */
@@ -773,8 +744,8 @@ int main(void) {
 			fastStop();
 			stopped = true;
 			while (true) {
-				if ((int) ((float) HAL_GetTick() / 1000) % 2 == 0)
-					HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+				HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+				HAL_Delay(100);
 			}
 		}
 
@@ -1592,12 +1563,18 @@ static void MX_GPIO_Init(void) {
 	/*Configure GPIO pin Output Level */
 	HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
 
-	/*Configure GPIO pins : INH2_Pin LED_Pin */
-	GPIO_InitStruct.Pin = INH2_Pin | LED_Pin;
+	/*Configure GPIO pins : INH2_Pin*/
+	GPIO_InitStruct.Pin = INH2_Pin;
 	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
 	GPIO_InitStruct.Pull = GPIO_NOPULL;
 	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
 	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+	GPIO_InitStruct.Pin = LED_Pin;
+	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+	GPIO_InitStruct.Pull = GPIO_NOPULL;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+	HAL_GPIO_Init(LED_GPIO_Port, &GPIO_InitStruct);
 
 	/*Configure GPIO pins : OCDB_Pin OCDA_Pin */
 	GPIO_InitStruct.Pin = OCDB_Pin | OCDA_Pin;
