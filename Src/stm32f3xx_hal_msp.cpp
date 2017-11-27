@@ -218,7 +218,8 @@ void HAL_TIM_Base_MspInit(TIM_HandleTypeDef* htim_base) {
 		__HAL_RCC_TIM1_CLK_ENABLE()
 		;
 		/* USER CODE BEGIN TIM1_MspInit 1 */
-
+    //HAL_NVIC_SetPriority(TIM1_UP_TIM16_IRQn, 0, 0);
+    //HAL_NVIC_EnableIRQ(TIM1_UP_TIM16_IRQn);
 		/* USER CODE END TIM1_MspInit 1 */
 	} else if (htim_base->Instance == TIM8) {
 		/* USER CODE BEGIN TIM8_MspInit 0 */
@@ -437,7 +438,10 @@ void HAL_I2C_MspInit(I2C_HandleTypeDef* hi2c) {
 		/* Peripheral clock enable */
 		//__HAL_RCC_I2C1_CLK_ENABLE();
 		/* USER CODE BEGIN I2C1_MspInit 1 */
-
+	  //HAL_NVIC_SetPriority(I2C1_ER_IRQn, 0, 1);
+	  //HAL_NVIC_EnableIRQ(I2C1_ER_IRQn);
+	  //HAL_NVIC_SetPriority(I2C1_EV_IRQn, 0, 2);
+	  //HAL_NVIC_EnableIRQ(I2C1_EV_IRQn);
 		/* USER CODE END I2C1_MspInit 1 */
 	}
 

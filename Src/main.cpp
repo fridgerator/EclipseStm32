@@ -99,6 +99,7 @@ TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim4;
 TIM_HandleTypeDef htim8;
+TIM_HandleTypeDef htim16;
 
 //http://www.ti.com/lit/ds/symlink/fdc2212.pdf
 //I2C Address selection pin: when  ADDR=L, I2C address = 0x2A, when ADDR=H, I2C address = 0x2B.
@@ -129,6 +130,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_ADC1_Init(void);
+static void MX_TIM16_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM8_Init(void);
 static void MX_ADC3_Init(void);
@@ -136,6 +138,7 @@ static void MX_TIM4_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_NVIC_Init(void);
+
 
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
@@ -250,6 +253,8 @@ int32_t o2, o1;
 
 int posDelta;
 uint32_t i = 0;
+
+TIM_HandleTypeDef s_TimerInstance;
 
 static int8_t sign(float val1, float val2) {
 	if (val1 > val2)
@@ -427,6 +432,11 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
 		HAL_ADC_Start_IT(hadc);
 }
 
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+	if (htim->Instance == TIM16)
+		HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+}
+
 void readAdc() {
 	HAL_ADC_Start(&hadc1);
 	if (HAL_ADC_PollForConversion(&hadc1, 100000) == HAL_OK) {
@@ -570,6 +580,8 @@ void initI2C() {
 
 }
 /* USER CODE END 0 */
+char buf15[20];
+long capValue;
 
 int main(void) {
 
@@ -597,6 +609,7 @@ int main(void) {
 	MX_GPIO_Init();
 	MX_DMA_Init();
 	MX_ADC1_Init();
+	//MX_TIM16_Init();
 	MX_TIM1_Init();
 	MX_TIM8_Init();
 	MX_ADC3_Init();
@@ -604,7 +617,6 @@ int main(void) {
 	MX_TIM3_Init();
 	MX_USB_DEVICE_Init();
 	MX_I2C1_Init();
-
 	/* Initialize interrupts */
 	MX_NVIC_Init();
 
@@ -641,25 +653,8 @@ int main(void) {
 	myPID2.SetAccelerationLimits(-0.5, 0.5);
 
 	initi2c2();
-	uint8_t aRxBuffer[2];
-
-	uint16_t REG_CHIP_MEM_ADDR = 0x7e;
-	if (HAL_I2C_Mem_Read(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, 10000) != HAL_OK) {
-		if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
-			Error_Handler();
-		}
-	}
-	uint16_t manufacturer = aRxBuffer[0] << 8;
-	manufacturer |= aRxBuffer[1];   // returns: manufacturer = 0x5449;
 
 	int i2cMeasure = 0;
-	while (i2cMeasure < 100000) {
-		char buf15[20];
-		long capValue = capSense.getReading();
-		sprintf(buf15, "Cap value0= %d value1= %lu\n", i2cMeasure, capValue);
-		printUsb(buf15);
-		i2cMeasure++;
-	}
 
 	HAL_TIM_Base_Start_IT(&htim1);
 	HAL_TIM_Base_Start_IT(&htim8);
@@ -726,6 +721,16 @@ int main(void) {
 			ocda_cnt[cnt_10sec] = 0;
 			ocdb_cnt[cnt_10sec] = 0;
 			prevCnt_10sec = cnt_10sec;
+
+			long tick1 = HAL_GetTick();
+			capValue = capSense.getReading();
+			if (capValue != 0) {
+				long tick2 = HAL_GetTick();
+				long difTick = tick2 - tick1;
+				//sprintf(buf15, "Cap value0= %d value1= %lu\n", i2cMeasure, capValue);
+				//printUsb(buf15);
+				i2cMeasure++;
+			}
 		}
 		if (ocda == 1)
 			ocda_cnt[cnt_10sec]++;
@@ -995,17 +1000,8 @@ void buildAndSendBuffer() {
 	ftoa(f5, g_ADCValue3 / 65535 * 1000, 2);
 	strcat(buffer, f5);
 
-//	strcat(buffer, " ");
-//	for (int l = 0; l < 10; l++) {
-//		sprintf(buf3, "%d_", ocda_cnt[l]);
-//		strcat(buffer, buf3);
-//	}
-//
-//	strcat(buffer, " ");
-//	for (int l = 0; l < 10; l++) {
-//		sprintf(buf3, "%d_", ocdb_cnt[l]);
-//		strcat(buffer, buf3);
-//	}
+	sprintf(buf3, " %lu", capValue);
+	strcat(buffer, buf3);
 
 	strcat(buffer, "\n");
 
@@ -1607,6 +1603,24 @@ static void MX_GPIO_Init(void) {
 	GPIO_InitStruct.Alternate = GPIO_AF4_I2C1;
 	HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
+}
+
+/* TIM16 init function */
+static void MX_TIM16_Init(void)
+{
+  htim16.Instance = TIM16;
+  htim16.Init.Prescaler = 0;
+  htim16.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim16.Init.Period = 0;
+  htim16.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim16.Init.RepetitionCounter = 0;
+  htim16.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim16) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+  HAL_TIM_Base_Start_IT(&htim16);
 }
 
 /* USER CODE BEGIN 4 */

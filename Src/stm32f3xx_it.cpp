@@ -40,6 +40,7 @@ extern uint8_t button1On;
 extern uint8_t button2On;
 extern uint8_t ocda;
 extern uint8_t ocdb;
+extern I2C_HandleTypeDef I2cHandle;
 
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {

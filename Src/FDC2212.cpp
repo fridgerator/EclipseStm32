@@ -56,14 +56,14 @@ void FDC2212::loadSettings(void) {
 	//reset device
 	write16FDC(FDC2212_RESET_DEV, 0b1000000000000000);  //set config
 
-	//0b00  00 0001                                         RESERVED
-	//0b0   0 00 0001                                   Normal current drive (auto scan is enabled)
-	//0b0   0 0 00 0001                               Disable interrupt pin
-	//0b0   0 0 0 00 0001                             RESERVED
-	//0b0   0 0 0 0 00 0001                         Use internal oscilator
-	//0b1   1 0 0 0 0 00 0001                     RESERVED
-	//0b0   0 1 0 0 0 0 00 0001                 full current mode
-	//0b1   1 0 1 0 0 0 0 00 0001             RESERVED
+	//0b00  00 0001                      RESERVED
+	//0b0   0 00 0001                    Normal current drive (auto scan is enabled)
+	//0b0   0 0 00 0001                  Disable interrupt pin
+	//0b0   0 0 0 00 0001                RESERVED
+	//0b0   0 0 0 0 00 0001              Use internal oscilator
+	//0b1   1 0 0 0 0 00 0001            RESERVED
+	//0b0   0 1 0 0 0 0 00 0001          full current mode
+	//0b1   1 0 1 0 0 0 0 00 0001        RESERVED
 	//0b0   0 1 0 1 0 0 0 0 00 0001      device is active - no sleep
 	//0b00 00 0 1 0 1 0 0 0 0 00 0001    Contineous reads on CH0
 
