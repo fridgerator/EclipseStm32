@@ -54,20 +54,20 @@ bool FDC2212::begin(void) {
 void FDC2212::loadSettings(void) {
 
 	//reset device
-	write16FDC(FDC2212_RESET_DEV, 0b1000000000000000);  //set config
+	write16FDC(FDC2212_RESET_DEV, 0b1000000000000000);  //reset device
 
 	//0b00  00 0001                      RESERVED
 	//0b0   0 00 0001                    Normal current drive (auto scan is enabled)
-	//0b0   0 0 00 0001                  Disable interrupt pin
+	//0b0   0 0 00 0001                  INTB_DIS - Do NOT disable interrupt pin
 	//0b0   0 0 0 00 0001                RESERVED
 	//0b0   0 0 0 0 00 0001              Use internal oscilator
 	//0b1   1 0 0 0 0 00 0001            RESERVED
 	//0b0   0 1 0 0 0 0 00 0001          full current mode
 	//0b1   1 0 1 0 0 0 0 00 0001        RESERVED
 	//0b0   0 1 0 1 0 0 0 0 00 0001      device is active - no sleep
-	//0b00 00 0 1 0 1 0 0 0 0 00 0001    Contineous reads on CH0
+	//0b00 00 0 1 0 1 0 0 0 0 00 0001    Contineous reads on CH0 CONFIG.ACTIVE_CHAN
 
-
+	//FDC2212_CONFIG_REGADDR              0x1A
 	write16FDC(FDC2212_CONFIG_REGADDR, 0b0001010000000001);  //set config
 	//write16FDC(FDC2212_CONFIG_REGADDR, 0x1E81);  //set config
 //    write16FDC(FDC2214_CONFIG_REGADDR, 0x201);  //set config
@@ -91,15 +91,16 @@ void FDC2212::loadSettings(void) {
 
 	//set drive register
 	//write16FDC(FDC2212_DRIVE_CH0_REGADDR, 0xF800);
+	//write16FDC(FDC2212_DRIVE_CH0_REGADDR, 0b0111100000000000);
+	//write16FDC(FDC2212_DRIVE_CH0_REGADDR, 0b0010100000000000);
 	write16FDC(FDC2212_DRIVE_CH0_REGADDR, 0b0111100000000000);
 
-	// 0b101                            Deglitch 10MHz, oscilation is ~4MHz by default
-	// 0b00 000100 0001 [101]             RESERVED
-	// 0b00 [00 0100 0001] [101]        Sequence unused only read on CH0 using CONFIG.ACTIVE_CHAN
-	// 0b0 [00] [00 0100 0001] [101x]    Enable autoscan
-	// 0b0000 0010 0000 1101 aka 0x020D
-	//write16FDC(FDC2212_MUX_CONFIG_REGADDR, 0x020D);  //set mux config for channels
-	write16FDC(FDC2212_MUX_CONFIG_REGADDR, 0b000001000001101);  //set mux config for channels
+	// 0b 										101 					Deglitch 10MHz, oscilation is ~4MHz by default
+	// 0b 		 	 	 0001000001 101           RESERVED
+	// 0b00 		00 0001000001 101        		Ch0, Ch1 Sequence unused only read on CH0 using CONFIG.ACTIVE_CHAN
+	// 0b0    0 00 0001000001 101        		Continuous conversion on the single channel selected by CONFIG.ACTIVE_CHAN register field.
+
+	write16FDC(FDC2212_MUX_CONFIG_REGADDR, 0b0000001000001101);  //set mux config for channels
 
 	// set warnings
 	// 0b1    											1										report data ready flag
@@ -168,18 +169,21 @@ unsigned long FDC2212::getReading() {
 	unsigned long reading = 0;
 	long long fsensor = 0;
 	int status = read16FDC(FDC2212_STATUS_REGADDR);
+
+	if (status & FDC2212_CH0_DRDY)
+		asm("nop");
+	if (status & FDC2212_CH0_AMPL_LOW)
+		asm("nop");
+	if (status & FDC2212_CH0_AMPL_HIGH)
+		asm("nop");
+	if (status & FDC2212_CH0_WCHD_TO)
+		asm("nop");
+
 	while (timeout && !(status & FDC2212_CH0_UNREADCONV)) {
 //        Serial.println("status: " + String(status));
 		status = read16FDC(FDC2212_STATUS_REGADDR);
 
-		if (status & FDC2212_CH0_DRDY)
-			asm("nop");
-		if (status & FDC2212_CH0_AMPL_LOW)
-			asm("nop");
-		if (status & FDC2212_CH0_AMPL_HIGH)
-			asm("nop");
-		if (status & FDC2212_CH0_WCHD_TO)
-			asm("nop");
+
 
 		timeout--;
 	}
@@ -297,8 +301,6 @@ uint16_t FDC2212::read16FDC(uint16_t address) {
 	 return data;
 	 */
 	uint8_t aRxBuffer[2];
-
-	// read chip MANUFACTURER_ID
 	if (HAL_I2C_Mem_Read(&_i2cHandle, _i2caddr, address, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, 100) != HAL_OK) {
 		if (HAL_I2C_GetError(&_i2cHandle) != HAL_I2C_ERROR_AF) {
 			Error_Handler();

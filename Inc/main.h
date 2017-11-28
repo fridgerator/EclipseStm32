@@ -92,6 +92,10 @@
 #define ENC1_Pin GPIO_PIN_7
 #define ENC1_GPIO_Port GPIOB
 
+#define CAPSense_Pin GPIO_PIN_13
+#define CAPSense_GPIO_Port GPIOB
+#define CAPSense__EXTI_IRQn EXTI9_5_IRQn
+
 /* ########################## Assert Selection ############################## */
 /**
   * @brief Uncomment the line below to expanse the "assert_param" macro in the 

@@ -55,7 +55,6 @@
 #include "usb_device.h"
 
 /* USER CODE BEGIN Includes */
-
 #include "PID_v1.h"
 #include "FDC2212.h"
 #include "../Drivers/STM32F3xx_HAL_Driver/Inc/Legacy/stm32_hal_legacy.h"
@@ -138,7 +137,6 @@ static void MX_TIM4_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_NVIC_Init(void);
-
 
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
@@ -394,40 +392,47 @@ uint32_t RTC_ReadBackupRegister(uint32_t RTC_BKP_DR) {
 	return (*(__IO uint32_t *) tmp);
 }
 
+uint8_t hal_direction_status(ADC_HandleTypeDef *hadc) {
+	return ((hadc->Instance->CR & TIM_CR1_DIR) == TIM_CR1_DIR);
+}
+
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
-	if (hadc->Instance == hadc1.Instance) {
-		g_DmaOffsetBeforeAveragingH1 = ADC_BUFFER_LENGTH - DMA1_Channel1->CNDTR;
-		g_ADCValue1 = (float) std::accumulate(DMA_ADCvalues1, DMA_ADCvalues1 + ADC_BUFFER_LENGTH / 2, 0) / (ADC_BUFFER_LENGTH / 2);
-		g_DmaOffsetAfterAveragingH1 = ADC_BUFFER_LENGTH - DMA1_Channel1->CNDTR;
-		g_MeasurementNumber1 += ADC_BUFFER_LENGTH / 2;
-	} else if (hadc->Instance == hadc3.Instance) {
-		g_DmaOffsetBeforeAveragingH3 = ADC_BUFFER_LENGTH - DMA2_Channel5->CNDTR;
-		g_ADCValue3 = (float) std::accumulate(DMA_ADCvalues3, DMA_ADCvalues3 + ADC_BUFFER_LENGTH / 2, 0) / (ADC_BUFFER_LENGTH / 2);
-		g_DmaOffsetAfterAveragingH3 = ADC_BUFFER_LENGTH - DMA2_Channel5->CNDTR;
-		g_MeasurementNumber3 += ADC_BUFFER_LENGTH / 2;
+	if (hal_direction_status(hadc) == 0) {
+		if (hadc->Instance == hadc1.Instance) {
+			g_DmaOffsetBeforeAveragingH1 = ADC_BUFFER_LENGTH - DMA1_Channel1->CNDTR;
+			g_ADCValue1 = (float) std::accumulate(DMA_ADCvalues1, DMA_ADCvalues1 + ADC_BUFFER_LENGTH / 2, 0) / (ADC_BUFFER_LENGTH / 2);
+			g_DmaOffsetAfterAveragingH1 = ADC_BUFFER_LENGTH - DMA1_Channel1->CNDTR;
+			g_MeasurementNumber1 += ADC_BUFFER_LENGTH / 2;
+		} else if (hadc->Instance == hadc3.Instance) {
+			g_DmaOffsetBeforeAveragingH3 = ADC_BUFFER_LENGTH - DMA2_Channel5->CNDTR;
+			g_ADCValue3 = (float) std::accumulate(DMA_ADCvalues3, DMA_ADCvalues3 + ADC_BUFFER_LENGTH / 2, 0) / (ADC_BUFFER_LENGTH / 2);
+			g_DmaOffsetAfterAveragingH3 = ADC_BUFFER_LENGTH - DMA2_Channel5->CNDTR;
+			g_MeasurementNumber3 += ADC_BUFFER_LENGTH / 2;
+		}
+		g_ADCValue = MAX(g_ADCValue3, g_ADCValue1);
+		//HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
 	}
-	g_ADCValue = MAX(g_ADCValue3, g_ADCValue1);
-	//HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
 
 	if (!stopped)
 		HAL_ADC_Start_IT(hadc);
 }
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
-	if (hadc->Instance == hadc1.Instance) {
-		g_DmaOffsetBeforeAveragingF1 = ADC_BUFFER_LENGTH - DMA1_Channel1->CNDTR;
-		g_ADCValue1 = (float) std::accumulate(DMA_ADCvalues1 + ADC_BUFFER_LENGTH / 2, DMA_ADCvalues1 + ADC_BUFFER_LENGTH, 0) / (ADC_BUFFER_LENGTH / 2);
-		g_DmaOffsetAfterAveragingF1 = ADC_BUFFER_LENGTH - DMA1_Channel1->CNDTR;
-		g_MeasurementNumber1 += ADC_BUFFER_LENGTH / 2;
-	} else if (hadc->Instance == hadc3.Instance) {
-		g_DmaOffsetBeforeAveragingF3 = ADC_BUFFER_LENGTH - DMA2_Channel5->CNDTR;
-		g_ADCValue3 = (float) std::accumulate(DMA_ADCvalues3 + ADC_BUFFER_LENGTH / 2, DMA_ADCvalues3 + ADC_BUFFER_LENGTH, 0) / (ADC_BUFFER_LENGTH / 2);
-		g_DmaOffsetAfterAveragingF3 = ADC_BUFFER_LENGTH - DMA2_Channel5->CNDTR;
-		g_MeasurementNumber3 += ADC_BUFFER_LENGTH / 2;
+	if (hal_direction_status(hadc) == 0) {
+		if (hadc->Instance == hadc1.Instance) {
+			g_DmaOffsetBeforeAveragingF1 = ADC_BUFFER_LENGTH - DMA1_Channel1->CNDTR;
+			g_ADCValue1 = (float) std::accumulate(DMA_ADCvalues1 + ADC_BUFFER_LENGTH / 2, DMA_ADCvalues1 + ADC_BUFFER_LENGTH, 0) / (ADC_BUFFER_LENGTH / 2);
+			g_DmaOffsetAfterAveragingF1 = ADC_BUFFER_LENGTH - DMA1_Channel1->CNDTR;
+			g_MeasurementNumber1 += ADC_BUFFER_LENGTH / 2;
+		} else if (hadc->Instance == hadc3.Instance) {
+			g_DmaOffsetBeforeAveragingF3 = ADC_BUFFER_LENGTH - DMA2_Channel5->CNDTR;
+			g_ADCValue3 = (float) std::accumulate(DMA_ADCvalues3 + ADC_BUFFER_LENGTH / 2, DMA_ADCvalues3 + ADC_BUFFER_LENGTH, 0) / (ADC_BUFFER_LENGTH / 2);
+			g_DmaOffsetAfterAveragingF3 = ADC_BUFFER_LENGTH - DMA2_Channel5->CNDTR;
+			g_MeasurementNumber3 += ADC_BUFFER_LENGTH / 2;
+		}
+		g_ADCValue = MAX(g_ADCValue3, g_ADCValue1);
+		//HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
 	}
-	g_ADCValue = MAX(g_ADCValue3, g_ADCValue1);
-	//HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-
 	if (!stopped)
 		HAL_ADC_Start_IT(hadc);
 }
@@ -706,31 +711,22 @@ int main(void) {
 //			readAdc();
 //		}
 
-		if (HAL_GPIO_ReadPin(OCDA_GPIO_Port, OCDA_Pin) == GPIO_PIN_RESET)
-			ocda = 1;
-		else
-			ocda = 0;
-
-		if (HAL_GPIO_ReadPin(OCDB_GPIO_Port, OCDB_Pin) == GPIO_PIN_RESET)
-			ocdb = 1;
-		else
-			ocdb = 0;
+//		for (int i = 0; i < 1000000000; i++) {
+//			//long tick1 = HAL_GetTick();
+//			capValue = capSense.getReading();
+//			if (capValue != 0) {
+//				//long tick2 = HAL_GetTick();
+//				//long difTick = tick2 - tick1;
+//				sprintf(buf15, "Cap value0= %d value1= %lu\n", i2cMeasure, capValue);
+//				printUsb(buf15);
+//			}
+//		}
 
 		int cnt_10sec = (int) ((float) HAL_GetTick() / 1000) % 10;
 		if (cnt_10sec != prevCnt_10sec) {
 			ocda_cnt[cnt_10sec] = 0;
 			ocdb_cnt[cnt_10sec] = 0;
 			prevCnt_10sec = cnt_10sec;
-
-			long tick1 = HAL_GetTick();
-			capValue = capSense.getReading();
-			if (capValue != 0) {
-				long tick2 = HAL_GetTick();
-				long difTick = tick2 - tick1;
-				//sprintf(buf15, "Cap value0= %d value1= %lu\n", i2cMeasure, capValue);
-				//printUsb(buf15);
-				i2cMeasure++;
-			}
 		}
 		if (ocda == 1)
 			ocda_cnt[cnt_10sec]++;
@@ -741,7 +737,7 @@ int main(void) {
 		// it seems motor are stucked
 		// we end program
 		// and signal with blinking led
-		if (ocda_cnt[cnt_10sec] > 1000 || ocdb_cnt[cnt_10sec] > 1000) {
+		if (ocda_cnt[cnt_10sec] > 3000 || ocdb_cnt[cnt_10sec] > 3000) {
 			sprintf(buffer, "Resetted. %d %d\n", ocda_cnt[cnt_10sec], ocdb_cnt[cnt_10sec]);
 			printUsb(buffer);
 			fastStop();
@@ -1163,6 +1159,10 @@ static void MX_NVIC_Init(void) {
 	/* EXTI15_10_IRQn interrupt configuration */
 	HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
 	HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
+
+	//HAL_NVIC_SetPriority(TIM1_UP_TIM16_IRQn, 0, 0);
+	//HAL_NVIC_EnableIRQ(TIM1_UP_TIM16_IRQn);
+
 }
 
 /* ADC1 init function */
@@ -1572,7 +1572,7 @@ static void MX_GPIO_Init(void) {
 
 	/*Configure GPIO pins : OCDB_Pin OCDA_Pin */
 	GPIO_InitStruct.Pin = OCDB_Pin | OCDA_Pin;
-	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+	GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
 	GPIO_InitStruct.Pull = GPIO_NOPULL;
 	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
@@ -1585,8 +1585,8 @@ static void MX_GPIO_Init(void) {
 
 	/*Configure GPIO pin : CAP_IN_Pin */
 	GPIO_InitStruct.Pin = CAP_IN_Pin;
-	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-	GPIO_InitStruct.Pull = GPIO_NOPULL;
+	GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+	GPIO_InitStruct.Pull = GPIO_PULLUP;
 	HAL_GPIO_Init(CAP_IN_GPIO_Port, &GPIO_InitStruct);
 
 	/*Configure GPIO pins : Button1_Pin Button2_Pin */
@@ -1606,21 +1606,19 @@ static void MX_GPIO_Init(void) {
 }
 
 /* TIM16 init function */
-static void MX_TIM16_Init(void)
-{
-  htim16.Instance = TIM16;
-  htim16.Init.Prescaler = 0;
-  htim16.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim16.Init.Period = 0;
-  htim16.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim16.Init.RepetitionCounter = 0;
-  htim16.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim16) != HAL_OK)
-  {
-    _Error_Handler(__FILE__, __LINE__);
-  }
+static void MX_TIM16_Init(void) {
+	htim16.Instance = TIM16;
+	htim16.Init.Prescaler = 0;
+	htim16.Init.CounterMode = TIM_COUNTERMODE_UP;
+	htim16.Init.Period = 0;
+	htim16.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+	htim16.Init.RepetitionCounter = 0;
+	htim16.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+	if (HAL_TIM_Base_Init(&htim16) != HAL_OK) {
+		_Error_Handler(__FILE__, __LINE__);
+	}
 
-  HAL_TIM_Base_Start_IT(&htim16);
+	HAL_TIM_Base_Start_IT(&htim16);
 }
 
 /* USER CODE BEGIN 4 */
