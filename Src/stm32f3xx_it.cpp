@@ -38,23 +38,30 @@
 /* USER CODE BEGIN 0 */
 #include "main.h"
 #include "FDC2212.h"
+#include "ButtonControl.h"
 
-extern uint8_t button1On;
-extern uint8_t button2On;
-extern uint8_t ocda;
-extern uint8_t ocdb;
+extern volatile uint8_t button1On;
+extern volatile uint8_t button2On;
+extern volatile uint8_t ocda;
+extern volatile uint8_t ocdb;
 extern FDC2212 capSense;
 extern long capValue;
 bool reading;
 
+extern TIM_HandleTypeDef htim2;
+
+
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
+	//__disable_irq();
 	if (HAL_GPIO_ReadPin(Button1_GPIO_Port, Button1_Pin) == GPIO_PIN_RESET) {
 		button1On = 1;
+		ButtonControl::getInstance()->button1();
 	} else {
 		button1On = 0;
 	}
 	if (HAL_GPIO_ReadPin(Button2_GPIO_Port, Button2_Pin) == GPIO_PIN_RESET) {
 		button2On = 1;
+		ButtonControl::getInstance()->button2();
 	} else {
 		button2On = 0;
 	}
@@ -75,6 +82,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 			reading = true;
 			capValue = capSense.getReading();
 			if (capValue != 0) {
+				ButtonControl::getInstance()->valueReceived(capValue);
 				//long tick2 = HAL_GetTick();
 				//long difTick = tick2 - tick1;
 				//sprintf(buf15, "Cap value0= %d value1= %lu\n", i2cMeasure, capValue);
@@ -84,6 +92,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 		}
 
 	}
+	//__enable_irq();
 }
 
 /* USER CODE END 0 */
@@ -94,6 +103,7 @@ extern DMA_HandleTypeDef hdma_adc1;
 extern DMA_HandleTypeDef hdma_adc3;
 extern TIM_HandleTypeDef htim3;
 extern TIM_HandleTypeDef htim4;
+
 
 /******************************************************************************/
 /*            Cortex-M4 Processor Interruption and Exception Handlers         */
@@ -119,6 +129,7 @@ void HardFault_Handler(void) {
 
 	/* USER CODE END HardFault_IRQn 0 */
 	while (1) {
+
 	}
 	/* USER CODE BEGIN HardFault_IRQn 1 */
 
@@ -208,7 +219,6 @@ void PendSV_Handler(void) {
  */
 void SysTick_Handler(void) {
 	/* USER CODE BEGIN SysTick_IRQn 0 */
-
 	/* USER CODE END SysTick_IRQn 0 */
 	HAL_IncTick();
 	HAL_SYSTICK_IRQHandler();
@@ -255,12 +265,13 @@ void USB_LP_CAN_RX0_IRQHandler(void) {
  */
 void EXTI9_5_IRQHandler(void) {
 	/* USER CODE BEGIN EXTI9_5_IRQn 0 */
-
+	//__disable_irq();
 	/* USER CODE END EXTI9_5_IRQn 0 */
 	HAL_GPIO_EXTI_IRQHandler(Button1_Pin);
 	HAL_GPIO_EXTI_IRQHandler(OCDA_Pin);
 	HAL_GPIO_EXTI_IRQHandler(OCDB_Pin);
 	/* USER CODE BEGIN EXTI9_5_IRQn 1 */
+	//__enable_irq();
 
 	/* USER CODE END EXTI9_5_IRQn 1 */
 }
@@ -292,17 +303,34 @@ void TIM4_IRQHandler(void) {
 }
 
 /**
+ * @brief This function handles TIM4 global interrupt.
+ */
+void TIM2_IRQHandler(void) {
+	//__disable_irq();
+	/* USER CODE BEGIN TIM4_IRQn 0 */
+
+	/* USER CODE END TIM4_IRQn 0 */
+	HAL_TIM_IRQHandler(&htim2);
+	/* USER CODE BEGIN TIM4_IRQn 1 */
+
+	/* USER CODE END TIM4_IRQn 1 */
+	//__enable_irq();
+}
+
+/**
  * @brief This function handles EXTI line[15:10] interrupts.
  */
 void EXTI15_10_IRQHandler(void) {
+	//__disable_irq();
 	/* USER CODE BEGIN EXTI15_10_IRQn 0 */
 
 	/* USER CODE END EXTI15_10_IRQn 0 */
-	HAL_GPIO_EXTI_IRQHandler(CAPSense_Pin);
+	//HAL_GPIO_EXTI_IRQHandler(CAPSense_Pin);
 	HAL_GPIO_EXTI_IRQHandler(Button2_Pin);
 	/* USER CODE BEGIN EXTI15_10_IRQn 1 */
 
 	/* USER CODE END EXTI15_10_IRQn 1 */
+	//__enable_irq();
 }
 
 /**

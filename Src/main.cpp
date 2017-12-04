@@ -49,10 +49,12 @@
 /* Includes ------------------------------------------------------------------*/
 
 /* Includes ------------------------------------------------------------------*/
+
 #include <numeric>
 #include "main.h"
 #include "stm32f3xx_hal.h"
 #include "usb_device.h"
+#include "MiniPID.h"
 
 /* USER CODE BEGIN Includes */
 #include "PID_v1.h"
@@ -61,6 +63,13 @@
 #include "stm32f303xc.h"
 #include "math.h"
 #include "usbd_cdc_if.h"
+#include "time.h"
+
+#define IRQ_STATE_DISABLED (0x00000001)
+#define IRQ_STATE_ENABLED  (0x00000000)
+static inline uint8_t query_irq(void) {
+    return __get_PRIMASK();
+}
 
 #define SIXSECONDS (6*1000L) // three seconds are 3000 milliseconds
 #define THREESECONDS (3*1000L) // three seconds are 3000 milliseconds
@@ -80,6 +89,8 @@ uint16_t ocda_cnt[10];
 uint16_t ocdb_cnt[10];
 bool stopped = false;
 
+
+
 /* Exported macro ------------------------------------------------------------*/
 #define COUNTOF(__BUFFER__)   (sizeof(__BUFFER__) / sizeof(*(__BUFFER__)))
 /* Exported functions ------------------------------------------------------- */
@@ -98,7 +109,7 @@ TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim4;
 TIM_HandleTypeDef htim8;
-TIM_HandleTypeDef htim16;
+TIM_HandleTypeDef htim2;
 
 //http://www.ti.com/lit/ds/symlink/fdc2212.pdf
 //I2C Address selection pin: when  ADDR=L, I2C address = 0x2A, when ADDR=H, I2C address = 0x2B.
@@ -129,7 +140,6 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_ADC1_Init(void);
-static void MX_TIM16_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM8_Init(void);
 static void MX_ADC3_Init(void);
@@ -137,6 +147,7 @@ static void MX_TIM4_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_NVIC_Init(void);
+static void MX_TIM2_Init(void);
 
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
@@ -212,8 +223,6 @@ bool slowStopDone = false;
 uint8_t previousButton = 0;
 bool inPidCorrection = false;
 
-float speedRamp = 0.10; // [increment of PWM / ms]
-
 bool safeMode = false;
 int32_t i_emergStop = 0;
 
@@ -240,13 +249,13 @@ float Output2;
 float Input2 = 32768;
 float Output1;
 
-PID1 myPID2 = PID1(&Input2, &Output2, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
-PID1 myPID1 = PID1(&Input1, &Output1, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
+MiniPID myPID2 = MiniPID(30, 50, 15); // PID1(&Input2, &Output2, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
+MiniPID myPID1 = MiniPID(30, 50, 15); //PID1(&Input1, &Output1, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
 
 FDC2212 capSense = FDC2212();
 
-float Output2_adj;
-float Output1_adj;
+double Output2_adj;
+double Output1_adj;
 int32_t o2, o1;
 
 int posDelta;
@@ -300,13 +309,24 @@ void testPWMs() {
 // 310 mV padca na 1kOhm uporu
 // I=U/R -> I = 0.310 V/1000 Ohm = 0.000310 A = 0.3 mA
 void HAL_Delay(__IO uint32_t Delay) {
-	uint32_t tickstart = HAL_GetTick();
-	uint32_t now = tickstart;
-	uint32_t difference = 0;
-	while (difference < Delay) {
-		now = HAL_GetTick();
-		difference = now - tickstart;
-	}
+  if (query_irq() == IRQ_STATE_ENABLED) {
+        // IRQs enabled, so can use systick counter to do the delay
+        extern __IO uint32_t uwTick;
+        uint32_t start = uwTick;
+        // Wraparound of tick is taken care of by 2's complement arithmetic.
+        while (uwTick - start < Delay) {
+            // Enter sleep mode, waiting for (at least) the SysTick interrupt.
+            __WFI();
+        }
+    } else {
+        // IRQs disabled, so need to use a busy loop for the delay.
+        // To prevent possible overflow of the counter we use a double loop.
+        const uint32_t count_1ms = HAL_RCC_GetSysClockFreq() / 4000;
+        for (int i = 0; i < Delay; i++) {
+            for (uint32_t count = 0; ++count <= count_1ms;) {
+            }
+        }
+    }
 }
 
 uint8_t printUsb(const char* buf) {
@@ -396,6 +416,11 @@ uint8_t hal_direction_status(ADC_HandleTypeDef *hadc) {
 	return ((hadc->Instance->CR & TIM_CR1_DIR) == TIM_CR1_DIR);
 }
 
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+	if (htim->Instance == TIM2)
+		HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+}
+
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
 	if (hal_direction_status(hadc) == 0) {
 		if (hadc->Instance == hadc1.Instance) {
@@ -435,11 +460,6 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
 	}
 	if (!stopped)
 		HAL_ADC_Start_IT(hadc);
-}
-
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
-	if (htim->Instance == TIM16)
-		HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
 }
 
 void readAdc() {
@@ -499,91 +519,6 @@ void readAdc() {
 	}
 }
 
-void write16FDC(uint16_t REG_CHIP_MEM_ADDR, uint16_t value) {
-	uint8_t aTxBuffer[2] = { (value >> 8), (value & 0xff) };
-	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer, 2, 10000) != HAL_OK) {
-		if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
-			Error_Handler();
-		}
-	}
-}
-
-void initi2c2() {
-
-	capSense.begin();
-
-}
-
-void initI2C() {
-	long i2cMeasure = 0;
-	uint8_t aRxBuffer[2];
-
-// read chip MANUFACTURER_ID
-	uint16_t REG_CHIP_MEM_ADDR = 0x7e;
-	if (HAL_I2C_Mem_Read(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, 10000) != HAL_OK) {
-		if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
-			Error_Handler();
-		}
-	}
-	uint16_t manufacturer = aRxBuffer[0] << 8;
-	manufacturer |= aRxBuffer[1];   // returns: manufacturer = 0x5449;
-
-//CH0_FREQ_DIVIDER
-	REG_CHIP_MEM_ADDR = 0x14;
-	uint8_t aTxBuffer[2] = { (0x2001 >> 8), (0x2001 & 0xff) };
-
-	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer, 2, 10000) != HAL_OK) {
-		if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
-			Error_Handler();
-		}
-	}
-
-//DRIVE_CURRENT_CH0
-	REG_CHIP_MEM_ADDR = 0x1E;
-	uint8_t aTxBuffer2[2] = { (0x7C00 >> 8), (0x7C00 & 0xff) };
-	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer2, 2, 10000) != HAL_OK) {
-		if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
-			Error_Handler();
-		}
-	}
-
-//SETTLECOUNT
-	REG_CHIP_MEM_ADDR = 0x10;
-	uint8_t aTxBuffer3[2] = { (0x000A >> 8), (0x000A & 0xff) };
-	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer3, 2, 10000) != HAL_OK) {
-		if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
-			Error_Handler();
-		}
-	}
-
-//CH0_RCOUNT
-	REG_CHIP_MEM_ADDR = 0x08;
-	uint8_t aTxBuffer4[2] = { (0x2089 >> 8), (0x2089 & 0xff) };
-	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer4, 2, 10000) != HAL_OK) {
-		if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
-			Error_Handler();
-		}
-	}
-
-//MUX_CONFIG
-	REG_CHIP_MEM_ADDR = 0x1B;
-	uint8_t aTxBuffer5[2] = { (0xC20D >> 8), (0xC20D & 0xff) };
-	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer5, 2, 10000) != HAL_OK) {
-		if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
-			Error_Handler();
-		}
-	}
-
-//CONFIG
-	REG_CHIP_MEM_ADDR = 0x1A;
-	uint8_t aTxBuffer6[2] = { (0x1601 >> 8), (0x1601 & 0xff) };
-	if (HAL_I2C_Mem_Write(&I2cHandle, I2C_ADDRESS, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer6, 2, 10000) != HAL_OK) {
-		if (HAL_I2C_GetError(&I2cHandle) != HAL_I2C_ERROR_AF) {
-			Error_Handler();
-		}
-	}
-
-}
 /* USER CODE END 0 */
 char buf15[20];
 long capValue;
@@ -614,7 +549,6 @@ int main(void) {
 	MX_GPIO_Init();
 	MX_DMA_Init();
 	MX_ADC1_Init();
-	//MX_TIM16_Init();
 	MX_TIM1_Init();
 	MX_TIM8_Init();
 	MX_ADC3_Init();
@@ -623,9 +557,8 @@ int main(void) {
 	MX_USB_DEVICE_Init();
 	MX_I2C1_Init();
 	/* Initialize interrupts */
+	//MX_TIM2_Init();
 	MX_NVIC_Init();
-
-	capSense = FDC2212(I2cHandle);
 
 	/* USER CODE BEGIN 2 */
 
@@ -649,17 +582,26 @@ int main(void) {
 	__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
 	__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_1, 0);
 
-	myPID2.SetMode(AUTOMATIC);
-	myPID2.SetOutputLimits(-850.0, 850.0);
-	myPID1.SetMode(AUTOMATIC);
-	myPID1.SetOutputLimits(-850.0, 850.0);
+	//myPID2.SetMode(AUTOMATIC);
 
-	myPID1.SetAccelerationLimits(-0.5, 0.5);
-	myPID2.SetAccelerationLimits(-0.5, 0.5);
+	uint8_t speedCompensation = 50;
 
-	initi2c2();
+	myPID2.setOutputLimits(-(double) PWM_RES + (double) speedCompensation, (double) PWM_RES - (double) speedCompensation); // .SetOutputLimits(-850.0, 850.0);
+	//myPID2.setOutputFilter(0.1);
+	//myPID1.SetMode(AUTOMATIC);
+	myPID1.setOutputLimits(-(double) PWM_RES + (double) speedCompensation, (double) PWM_RES - (double) speedCompensation);
+	//myPID1.setOutputFilter(0.1);
 
-	int i2cMeasure = 0;
+	myPID1.setMaxIOutput(100);
+	myPID2.setMaxIOutput(100);
+	myPID1.setOutputRampRate(0.52);
+	myPID2.setOutputRampRate(0.52);
+	//myPID2.SetAccelerationLimits(-0.5, 0.5);
+
+
+	//capSense = FDC2212(I2cHandle);
+	//capSense.begin();
+
 
 	HAL_TIM_Base_Start_IT(&htim1);
 	HAL_TIM_Base_Start_IT(&htim8);
@@ -690,7 +632,7 @@ int main(void) {
 	}
 
 //HAL_Delay(100);
-	resetPwm(0);
+	//resetPwm(0);
 //testPWMs();
 
 	for (int i = 0; i < 10; i++) {
@@ -740,12 +682,15 @@ int main(void) {
 		if (ocda_cnt[cnt_10sec] > 3000 || ocdb_cnt[cnt_10sec] > 3000) {
 			sprintf(buffer, "Resetted. %d %d\n", ocda_cnt[cnt_10sec], ocdb_cnt[cnt_10sec]);
 			printUsb(buffer);
+
+			/*
 			fastStop();
 			stopped = true;
 			while (true) {
 				HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
 				HAL_Delay(100);
 			}
+			*/
 		}
 
 //		if (HAL_GetTick() - last6seconds >= SIXSECONDS) {
@@ -765,15 +710,17 @@ int main(void) {
 		if (button1On == 0 && button2On == 0) {
 			if (abs(Setpoint1 - Input1) < 2)
 				inPosition1++;
+			else
+				inposition1 = 0;
 			if (abs(Setpoint1 - Input2) < 2)
 				inPosition2++;
-			if (myPID1.GetMode() == AUTOMATIC && inPosition1 > 100000) {
-				myPID1.SetMode(MANUAL);
-				Output1 = 0;
+			else
+				inposition2 = 0;
+			if (myPID1.getMode() == AUTOMATIC && inPosition1 > 2000) {
+				myPID1.setMode(MANUAL);
 			}
-			if (myPID2.GetMode() == AUTOMATIC && inPosition2 > 100000) {
-				myPID2.SetMode(MANUAL);
-				Output2 = 0;
+			if (myPID2.getMode() == AUTOMATIC && inPosition2 > 2000) {
+				myPID2.setMode(MANUAL);
 			}
 
 			previousButton = 0;
@@ -807,13 +754,13 @@ int main(void) {
 			if (prvic == false && previousButton != 2) {
 				resetPwm(i);
 				prvic = true;
-				myPID1.SetMode(AUTOMATIC);
-				myPID2.SetMode(AUTOMATIC);
+				myPID1.setMode(AUTOMATIC);
+				myPID2.setMode(AUTOMATIC);
 				inPosition1 = 0;
 				inPosition2 = 0;
 			}
 			//if (Setpoint1 < Input2 + 40) {
-			Setpoint1 = Setpoint1 + 0.008;
+			Setpoint1 = Setpoint1 + 0.1;
 			//}
 			previousButton = 2;
 			iOfStandStill = 0;
@@ -826,49 +773,46 @@ int main(void) {
 			if (prvic == false && previousButton != 1) {
 				resetPwm(i);
 				prvic = true;
-				myPID1.SetMode(AUTOMATIC);
-				myPID2.SetMode(AUTOMATIC);
+				myPID1.setMode(AUTOMATIC);
+				myPID2.setMode(AUTOMATIC);
 				inPosition1 = 0;
 				inPosition2 = 0;
 			}
 			//if (Setpoint1 > Input2 - 40) {
-			Setpoint1 = Setpoint1 - 0.008;
+			Setpoint1 = Setpoint1 - 0.1;
 			//}
 			previousButton = 1;
 			iOfStandStill = 0;
 		}
 		//HAL_Delay(1);
+		posDelta = static_cast<int>(round(Input2) - round(Input1));
 
-		myPID1.Compute();
-		myPID2.Compute();
-
-		posDelta = static_cast<int>(round(Input2 - Input1));
-		if (i % 100 == 0) {  // print reasults over usb every 300ms
-
-			SerialReceive();
-			buildAndSendBuffer();
-			//char buffer1[20] = { "" };
-			//sprintf(buffer1, "\n\rflash value: %lu\n\r", value);
-			//printUsb(buffer1);
-		}
+		Output1 = myPID1.getOutput(round(Input1), round(Setpoint1));
+		Output2 = myPID2.getOutput(round(Input2), round(Setpoint1));
 
 		//int8_t sign1 = sign(Output1 + posDelta * 20, Output1_adj);
 		//Output1_adj = Output1_adj + sign1 * speedRamp;
-		Output1_adj = Output1 + posDelta * 20;
+		//double maxDeltaCorrection = PWM_RES - myPID1.getMaxOutput();
+		// uint8_t OutDelta = clamp(posDelta * 20, -maxDeltaCorrection, maxDeltaCorrection);
+		double maxSpeedDiffOutput = clamp((double) posDelta * 35, -(double) speedCompensation, (double) speedCompensation);
+		/*
+		if (abs(posDelta) > 3) {
+			fastStop();
+			stopped = true;
+			while (true) {
+				HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+				HAL_Delay(50);
+			}
+		}
+		*/
+		Output1_adj = Output1 + maxSpeedDiffOutput; //+ (maxDeltaCorrection - abs(OutDelta)) + OutDelta;
 
 		//int8_t sign2 = sign(Output2 - posDelta * 20, Output2_adj);
 		//Output2_adj = Output2_adj + sign2 * speedRamp;
-		Output2_adj = Output2 - posDelta * 20;
+		Output2_adj = Output2 - maxSpeedDiffOutput; // + (maxDeltaCorrection - abs(OutDelta)) - OutDelta;		// - posDelta * 20;
 
-		if (Output1_adj < -1000)
-			Output1_adj = -1000;
-		if (Output1_adj > 1000)
-			Output1_adj = 1000;
-
-		if (Output2_adj < -1000)
-			Output2_adj = -1000;
-		if (Output2_adj > 1000)
-			Output2_adj = 1000;
+		Output1_adj = clamp(Output1_adj, -(double) PWM_RES, (double) PWM_RES);
+		Output2_adj = clamp(Output2_adj, -(double) PWM_RES, (double) PWM_RES);
 
 		o2 = (int32_t) Output2_adj;
 		o1 = (int32_t) Output1_adj;
@@ -892,6 +836,14 @@ int main(void) {
 		} else if (o1 >= 0.0) {
 			__HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, abs(o1));
 			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
+		}
+
+		if (i % 100 == 0) {  // print reasults over usb every 300ms
+			SerialReceive();
+			buildAndSendBuffer();
+			//char buffer1[20] = { "" };
+			//sprintf(buffer1, "\n\rflash value: %lu\n\r", value);
+			//printUsb(buffer1);
 		}
 
 	}
@@ -941,13 +893,13 @@ void buildAndSendBuffer() {
 	sprintf(buffer, "sp=%s, input=%s, output=%s\n\r", ftoa(f1, Setpoint1, 3), ftoa(f2, Input1, 3), ftoa(f3, Output2, 3));
 
 	strcpy(buffer, "PID ");
-	strcat(buffer, ftoa(f1, Setpoint1, 3));
+	strcat(buffer, ftoa(f1, round(Setpoint1), 3));
 	strcat(buffer, " ");
 
 	strcat(buffer, ftoa(f1, Input2, 3));
 	strcat(buffer, " ");
 
-	strcat(buffer, ftoa(f1, Output1, 3));
+	strcat(buffer, ftoa(f1, Output1_adj, 3));
 	strcat(buffer, " ");
 
 	strcat(buffer, ftoa(f1, myPID1.GetKp(), 3));
@@ -959,17 +911,17 @@ void buildAndSendBuffer() {
 	strcat(buffer, ftoa(f1, myPID1.GetKd(), 3));
 	strcat(buffer, " ");
 
-	if (myPID1.GetMode() == AUTOMATIC)
+	if (myPID1.getMode() == AUTOMATIC)
 		strcat(buffer, "Automatic");
 	else
 		strcat(buffer, "Manual");
 
 	strcat(buffer, " ");
 
-	if (myPID1.GetDirection() == DIRECT)
-		strcat(buffer, "Direct");
-	else
-		strcat(buffer, "Reverse");
+	//if (myPID1.getDirection() == DIRECT)
+	strcat(buffer, "Direct");
+	//else
+	//	strcat(buffer, "Reverse");
 
 	strcat(buffer, " ");
 
@@ -1056,24 +1008,25 @@ void SerialReceive() {
 				p = double(floatUnion.asFloat[3]); //
 				i = double(floatUnion.asFloat[4]); //
 				d = double(floatUnion.asFloat[5]); //
-				myPID2.SetTunings(p, i, d); //
-				myPID1.SetTunings(p, i, d); //
+				myPID2.setTunings(p, i, d); //
+				myPID1.setTunings(p, i, d); //
 
 				if (Auto_Man == 0) {
-					myPID2.SetMode(MANUAL); // * set the controller mode
-					myPID1.SetMode(MANUAL); // * set the controller mode
+					myPID2.setMode(MANUAL); // * set the controller mode
+					myPID1.setMode(MANUAL); // * set the controller mode
 				} else {
-					myPID2.SetMode(AUTOMATIC); //
-					myPID1.SetMode(AUTOMATIC); //
+					myPID2.setMode(AUTOMATIC); //
+					myPID1.setMode(AUTOMATIC); //
 				}
 
 				if (Direct_Reverse == 0) {
-					myPID2.SetControllerDirection(DIRECT); // * set the controller Direction
-					myPID1.SetControllerDirection(DIRECT); // * set the controller Direction
+					myPID2.setDirection(true); // * set the controller Direction
+					myPID1.setDirection(true); // * set the controller Direction
 				} else {
-					myPID2.SetControllerDirection(REVERSE); //
-					myPID1.SetControllerDirection(REVERSE); //
+					myPID2.setDirection(false); // * set the controller Direction
+					myPID1.setDirection(false); // * set the controller Direction
 				}
+
 			}
 			received_data_size = 0;
 		}
@@ -1153,15 +1106,14 @@ void SystemClock_Config(void) {
 /** NVIC Configuration
  */
 static void MX_NVIC_Init(void) {
+	HAL_NVIC_SetPriority(TIM1_UP_TIM16_IRQn, 8, 0);
+	HAL_NVIC_EnableIRQ(TIM1_UP_TIM16_IRQn);
 	/* EXTI9_5_IRQn interrupt configuration */
-	HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);
+	HAL_NVIC_SetPriority(EXTI9_5_IRQn, 8, 0);
 	HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 	/* EXTI15_10_IRQn interrupt configuration */
-	HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
+	HAL_NVIC_SetPriority(EXTI15_10_IRQn, 8, 0);
 	HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
-
-	//HAL_NVIC_SetPriority(TIM1_UP_TIM16_IRQn, 0, 0);
-	//HAL_NVIC_EnableIRQ(TIM1_UP_TIM16_IRQn);
 
 }
 
@@ -1205,7 +1157,7 @@ static void MX_ADC1_Init(void) {
 	sConfig.Channel = ADC_CHANNEL_1;
 	sConfig.Rank = 1;
 	sConfig.SingleDiff = ADC_SINGLE_ENDED;
-	sConfig.SamplingTime = ADC_SAMPLETIME_7CYCLES_5; //ADC_SAMPLETIME_2CYCLES_5;
+	sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5; //ADC_SAMPLETIME_2CYCLES_5;
 	sConfig.OffsetNumber = ADC_OFFSET_NONE;
 	sConfig.Offset = 0;
 	if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK) {
@@ -1254,7 +1206,7 @@ static void MX_ADC3_Init(void) {
 	sConfig.Channel = ADC_CHANNEL_1;
 	sConfig.Rank = 1;
 	sConfig.SingleDiff = ADC_SINGLE_ENDED;
-	sConfig.SamplingTime = ADC_SAMPLETIME_7CYCLES_5; //ADC_SAMPLETIME_2CYCLES_5;
+	sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5; //ADC_SAMPLETIME_2CYCLES_5;
 	sConfig.OffsetNumber = ADC_OFFSET_NONE;
 	sConfig.Offset = 0;
 	if (HAL_ADC_ConfigChannel(&hadc3, &sConfig) != HAL_OK) {
@@ -1311,7 +1263,7 @@ static void MX_TIM1_Init(void) {
 	TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig;
 
 	htim1.Instance = TIM1;
-	htim1.Init.Prescaler = 0;
+	htim1.Init.Prescaler = 1000;
 	htim1.Init.CounterMode = TIM_COUNTERMODE_CENTERALIGNED1;
 	htim1.Init.Period = 1000;
 	htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -1445,7 +1397,7 @@ static void MX_TIM8_Init(void) {
 	TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig;
 
 	htim8.Instance = TIM8;
-	htim8.Init.Prescaler = 0;
+	htim8.Init.Prescaler = 1;
 	htim8.Init.CounterMode = TIM_COUNTERMODE_CENTERALIGNED1;
 	htim8.Init.Period = 1000;
 	htim8.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -1517,10 +1469,10 @@ static void MX_DMA_Init(void) {
 
 	/* DMA interrupt init */
 	/* DMA1_Channel1_IRQn interrupt configuration */
-	HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
+	HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 1, 0);
 	HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
 	/* DMA2_Channel5_IRQn interrupt configuration */
-	HAL_NVIC_SetPriority(DMA2_Channel5_IRQn, 0, 0);
+	HAL_NVIC_SetPriority(DMA2_Channel5_IRQn, 1, 0);
 	HAL_NVIC_EnableIRQ(DMA2_Channel5_IRQn);
 
 }
@@ -1606,19 +1558,22 @@ static void MX_GPIO_Init(void) {
 }
 
 /* TIM16 init function */
-static void MX_TIM16_Init(void) {
-	htim16.Instance = TIM16;
-	htim16.Init.Prescaler = 0;
-	htim16.Init.CounterMode = TIM_COUNTERMODE_UP;
-	htim16.Init.Period = 0;
-	htim16.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-	htim16.Init.RepetitionCounter = 0;
-	htim16.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-	if (HAL_TIM_Base_Init(&htim16) != HAL_OK) {
+static void MX_TIM2_Init(void) {
+	TIM_ClockConfigTypeDef sClockSourceConfig;
+
+	htim2.Instance = TIM2;
+	htim2.Init.Prescaler = 40000;
+	htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+	htim2.Init.Period = 500;
+	htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+	htim2.Init.RepetitionCounter = 0;
+	htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+	if (HAL_TIM_Base_Init(&htim2) != HAL_OK) {
 		_Error_Handler(__FILE__, __LINE__);
 	}
 
-	HAL_TIM_Base_Start_IT(&htim16);
+	HAL_TIM_Base_MspInit(&htim2);
+	//HAL_TIM_Base_Start_IT(&htim2);
 }
 
 /* USER CODE BEGIN 4 */
@@ -1634,6 +1589,7 @@ void _Error_Handler(char * file, int line) {
 	/* USER CODE BEGIN Error_Handler_Debug */
 	/* User can add his own implementation to report the HAL error return state */
 	while (1) {
+		asm("nop");
 	}
 	/* USER CODE END Error_Handler_Debug */
 }

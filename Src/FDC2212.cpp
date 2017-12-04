@@ -303,7 +303,7 @@ uint16_t FDC2212::read16FDC(uint16_t address) {
 	uint8_t aRxBuffer[2];
 	if (HAL_I2C_Mem_Read(&_i2cHandle, _i2caddr, address, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, 100) != HAL_OK) {
 		if (HAL_I2C_GetError(&_i2cHandle) != HAL_I2C_ERROR_AF) {
-			Error_Handler();
+			//Error_Handler();
 		}
 	}
 	data = aRxBuffer[0] << 8;

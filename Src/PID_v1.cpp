@@ -10,6 +10,7 @@
 #include "stm32f303xc.h"
 #include "stm32f3xx_hal.h"
 #include <limits>
+#include <math.h>
 
 /*Constructor (...)*********************************************************
  *    The parameters specified here are those for for which we can't set up 
@@ -17,14 +18,17 @@
  ***************************************************************************/
 PID1::PID1(float* Input, float* Output, float* Setpoint, float Kp, float Ki, float Kd, int ControllerDirection) {
 
+	this->DWT_Init();
+
 	myOutput = Output;
 	myInput = Input;
 	mySetpoint = Setpoint;
 	inAuto = false;
 
-	SampleTime = 1;											//default Controller Sample Time is 0.1 seconds
+	SampleTime = 50;											//default Controller Sample Time is 0.1 seconds
 	PID1::SetOutputLimits(0, 255);				//default output limit corresponds to pwm limits
 	this->SetAccelerationLimits(std::numeric_limits<float>::min(), std::numeric_limits<float>::max());
+	this->SetAccelerationLimits(0,1);
 	lastEncoderPosition = *myInput;
 	timeOfPrevEnc = HAL_GetTick();
 
@@ -43,8 +47,8 @@ PID1::PID1(float* Input, float* Output, float* Setpoint, float Kp, float Ki, flo
 bool PID1::Compute() {
 	if (!inAuto)
 		return false;
-	unsigned long now = HAL_GetTick();
-	unsigned long timeChange = (now - this->lastTime);
+	uint32_t now = this->DWT_Get();
+	uint32_t timeChange = (now - this->lastTime);
 	if (timeChange >= this->SampleTime) {
 		/*Compute all the working error variables*/
 		//sprintf(buffer, "%lu timeChange: %lu\n\r", now, timeChange);
@@ -61,16 +65,16 @@ bool PID1::Compute() {
 		/*Compute PID Output*/
 		float output = kp * error + ITerm - kd * dInput;
 
-
 		//lets calculate speed change
-		/*
-		if (input != lastEncoderPosition) {
-			this->speed = (input - lastEncoderPosition) / (now - timeOfPrevEnc);
-			this->acceleration = (this->speed - this->prevSpeed) / timeChange;
 
-			if (this->acceleration > this->maxAccel)
-				output = prevOutput;
-			if (this->acceleration < this->minAccel)
+		if(timeOfPrevEnc==0)
+			timeOfPrevEnc = now;
+		if (input != lastEncoderPosition) {
+			float dt = ((float) (now - timeOfPrevEnc)) / 1000000;
+			this->speed = (float) (input - lastEncoderPosition) / dt;
+			this->acceleration = (this->speed - this->prevSpeed) / dt;
+
+			if (abs(this->acceleration) > this->maxAccel)
 				output = prevOutput;
 
 			if (output > outMax)
@@ -84,18 +88,16 @@ bool PID1::Compute() {
 		} else {
 
 		}
-		*/
+
 		*myOutput = output;
 
 		/*Remember some variables for next time*/
 		this->lastInput = input;
 		this->lastTime = now;
 		this->prevOutput = output;
-
 		return true;
-
-	} else
-		return false;
+	}
+	return false;
 }
 
 /* SetTunings(...)*************************************************************
@@ -229,24 +231,24 @@ int PID1::GetDirection() {
 	return controllerDirection;
 }
 
-void DWT_Init(void) {
-	if (!(CoreDebug->DEMCR & CoreDebug_DEMCR_TRCENA_Msk)) {
-		CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
-		DWT->CYCCNT = 0;
-		DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
-	}
+void PID1::DWT_Init(void) {
+	//if (!(CoreDebug->DEMCR & CoreDebug_DEMCR_TRCENA_Msk)) {
+	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+	DWT->CYCCNT = 0;
+	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+	//}
 }
 
-uint32_t DWT_Get(void) {
+uint32_t PID1::DWT_Get(void) {
 	return DWT->CYCCNT;
 }
 
 __inline
-uint8_t DWT_Compare(int32_t tp) {
+uint8_t PID1::DWT_Compare(int32_t tp) {
 	return (((int32_t) DWT_Get() - tp) < 0);
 }
 
-void DWT_Delay(uint32_t us) // microseconds
+void PID1::DWT_Delay(uint32_t us) // microseconds
 		{
 	int32_t tp = DWT_Get() + us * (SystemCoreClock / 1000000);
 	while (DWT_Compare(tp))

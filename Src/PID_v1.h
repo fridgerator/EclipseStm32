@@ -44,6 +44,10 @@ public:
 	float GetKd();			// where it's important to know what is actually
 	int GetMode();			//  inside the PID.
 	int GetDirection();			//
+	void DWT_Init();
+	uint32_t DWT_Get();
+	uint8_t DWT_Compare(int32_t tp);
+	void DWT_Delay(uint32_t us);
 
 	/*
 	static int AUTOMATIC;
