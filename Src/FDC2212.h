@@ -47,6 +47,7 @@ public:
     bool begin(void);
     double readCapacitance();
     unsigned long getReading();
+    bool initialized;
 
 private:
     void loadSettings(void);

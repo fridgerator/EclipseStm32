@@ -9,11 +9,13 @@
 
 FDC2212::FDC2212() {
 	_i2caddr = (FDC2214_I2C_ADDRESS << 1);
+	initialized = false;
 }
 
 FDC2212::FDC2212(I2C_HandleTypeDef i2cHandle) {
 	_i2caddr = (FDC2214_I2C_ADDRESS << 1);
 	_i2cHandle = i2cHandle;
+	initialized = false;
 }
 
 /**************************************************************************/
@@ -23,7 +25,6 @@ FDC2212::FDC2212(I2C_HandleTypeDef i2cHandle) {
 /**************************************************************************/
 bool FDC2212::begin(void) {
 	//Wire.begin();
-
 	uint8_t aRxBuffer[2];
 	uint16_t REG_CHIP_MEM_ADDR = 0x7e;
 	if (HAL_I2C_Mem_Read(&_i2cHandle, _i2caddr, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, 10000) != HAL_OK) {
@@ -42,6 +43,7 @@ bool FDC2212::begin(void) {
 
 	loadSettings();
 	setGain();
+	initialized = true;
 
 	return true;
 }
@@ -182,8 +184,6 @@ unsigned long FDC2212::getReading() {
 	while (timeout && !(status & FDC2212_CH0_UNREADCONV)) {
 //        Serial.println("status: " + String(status));
 		status = read16FDC(FDC2212_STATUS_REGADDR);
-
-
 
 		timeout--;
 	}

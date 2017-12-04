@@ -78,7 +78,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	if (HAL_GPIO_ReadPin(CAPSense_GPIO_Port, CAPSense_Pin) == GPIO_PIN_RESET) {
 		// read capacity value
 		//long tick1 = HAL_GetTick();
-		if (!reading) {
+		if (capSense.initialized && !reading) {
 			reading = true;
 			capValue = capSense.getReading();
 			if (capValue != 0) {
@@ -325,7 +325,7 @@ void EXTI15_10_IRQHandler(void) {
 	/* USER CODE BEGIN EXTI15_10_IRQn 0 */
 
 	/* USER CODE END EXTI15_10_IRQn 0 */
-	//HAL_GPIO_EXTI_IRQHandler(CAPSense_Pin);
+	HAL_GPIO_EXTI_IRQHandler(CAPSense_Pin);
 	HAL_GPIO_EXTI_IRQHandler(Button2_Pin);
 	/* USER CODE BEGIN EXTI15_10_IRQn 1 */
 

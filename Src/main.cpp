@@ -252,7 +252,7 @@ float Output1;
 MiniPID myPID2 = MiniPID(30, 50, 15); // PID1(&Input2, &Output2, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
 MiniPID myPID1 = MiniPID(30, 50, 15); //PID1(&Input1, &Output1, &Setpoint1, aggKp, aggKi, aggKd, DIRECT);
 
-FDC2212 capSense = FDC2212();
+FDC2212 capSense;
 
 double Output2_adj;
 double Output1_adj;
@@ -557,7 +557,7 @@ int main(void) {
 	MX_USB_DEVICE_Init();
 	MX_I2C1_Init();
 	/* Initialize interrupts */
-	//MX_TIM2_Init();
+	MX_TIM2_Init();
 	MX_NVIC_Init();
 
 	/* USER CODE BEGIN 2 */
@@ -599,12 +599,12 @@ int main(void) {
 	//myPID2.SetAccelerationLimits(-0.5, 0.5);
 
 
-	//capSense = FDC2212(I2cHandle);
-	//capSense.begin();
+	capSense = FDC2212(I2cHandle);
+	capSense.begin();
 
 
-	HAL_TIM_Base_Start_IT(&htim1);
-	HAL_TIM_Base_Start_IT(&htim8);
+	HAL_TIM_Base_Start(&htim1);
+	HAL_TIM_Base_Start(&htim8);
 
 	HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
 	HAL_ADCEx_Calibration_Start(&hadc3, ADC_SINGLE_ENDED);
@@ -1106,8 +1106,8 @@ void SystemClock_Config(void) {
 /** NVIC Configuration
  */
 static void MX_NVIC_Init(void) {
-	HAL_NVIC_SetPriority(TIM1_UP_TIM16_IRQn, 8, 0);
-	HAL_NVIC_EnableIRQ(TIM1_UP_TIM16_IRQn);
+	HAL_NVIC_SetPriority(TIM2_IRQn, 8, 0);
+	HAL_NVIC_EnableIRQ(TIM2_IRQn);
 	/* EXTI9_5_IRQn interrupt configuration */
 	HAL_NVIC_SetPriority(EXTI9_5_IRQn, 8, 0);
 	HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
@@ -1263,7 +1263,7 @@ static void MX_TIM1_Init(void) {
 	TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig;
 
 	htim1.Instance = TIM1;
-	htim1.Init.Prescaler = 1000;
+	htim1.Init.Prescaler = 0;
 	htim1.Init.CounterMode = TIM_COUNTERMODE_CENTERALIGNED1;
 	htim1.Init.Period = 1000;
 	htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -1397,7 +1397,7 @@ static void MX_TIM8_Init(void) {
 	TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig;
 
 	htim8.Instance = TIM8;
-	htim8.Init.Prescaler = 1;
+	htim8.Init.Prescaler = 0;
 	htim8.Init.CounterMode = TIM_COUNTERMODE_CENTERALIGNED1;
 	htim8.Init.Period = 1000;
 	htim8.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
