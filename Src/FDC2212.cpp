@@ -7,15 +7,31 @@
 
 #include "FDC2212.h"
 
+FDC2212* FDC2212::instance = 0;
+
+FDC2212* FDC2212::getInstance() {
+	if (!instance) {
+		instance = new FDC2212();
+	}
+	return instance;
+}
+
 FDC2212::FDC2212() {
 	_i2caddr = (FDC2214_I2C_ADDRESS << 1);
 	initialized = false;
+	capMin = ULONG_MAX;
+	capMax = 0;
+	isReading = false;
+	shouldread = false;
+	lastReadingTick = 0;
+	lastReading = 0;
+	dCap_dT = 0;
+	angle = 0;
 }
 
 FDC2212::FDC2212(I2C_HandleTypeDef i2cHandle) {
-	_i2caddr = (FDC2214_I2C_ADDRESS << 1);
+	instance = FDC2212::getInstance();
 	_i2cHandle = i2cHandle;
-	initialized = false;
 }
 
 /**************************************************************************/
@@ -29,7 +45,7 @@ bool FDC2212::begin(void) {
 	uint16_t REG_CHIP_MEM_ADDR = 0x7e;
 	if (HAL_I2C_Mem_Read(&_i2cHandle, _i2caddr, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, 10000) != HAL_OK) {
 		if (HAL_I2C_GetError(&_i2cHandle) != HAL_I2C_ERROR_AF) {
-			Error_Handler();
+			_Error_Handler(__FILE__, __LINE__);
 		}
 	}
 	uint16_t manufacturer = aRxBuffer[0] << 8;
@@ -167,47 +183,64 @@ void FDC2212::loadSettings(void) {
  */
 /**************************************************************************/
 unsigned long FDC2212::getReading() {
-	int timeout = 100;
 	unsigned long reading = 0;
-	long long fsensor = 0;
-	int status = read16FDC(FDC2212_STATUS_REGADDR);
+	if (!this->isReading) {
+		this->isReading = true;
+		int timeout = 100;
 
-	if (status & FDC2212_CH0_DRDY)
-		asm("nop");
-	if (status & FDC2212_CH0_AMPL_LOW)
-		asm("nop");
-	if (status & FDC2212_CH0_AMPL_HIGH)
-		asm("nop");
-	if (status & FDC2212_CH0_WCHD_TO)
-		asm("nop");
+		int status = read16FDC(FDC2212_STATUS_REGADDR);
 
-	while (timeout && !(status & FDC2212_CH0_UNREADCONV)) {
-//        Serial.println("status: " + String(status));
-		status = read16FDC(FDC2212_STATUS_REGADDR);
+		if (status & FDC2212_CH0_DRDY)
+			asm("nop");
+		if (status & FDC2212_CH0_AMPL_LOW)
+			asm("nop");
+		if (status & FDC2212_CH0_AMPL_HIGH)
+			asm("nop");
+		if (status & FDC2212_CH0_WCHD_TO)
+			asm("nop");
 
-		timeout--;
-	}
-	if (timeout == 100) {
-		//could be stale grab another
-		//read the 28 bit result
-		reading = read16FDC(FDC2212_DATA_CH0_REGADDR) << 16;
-		reading |= read16FDC(FDC2212_DATA_LSB_CH0_REGADDR);
 		while (timeout && !(status & FDC2212_CH0_UNREADCONV)) {
-//        Serial.println("status: " + String(status));
 			status = read16FDC(FDC2212_STATUS_REGADDR);
 			timeout--;
 		}
+		if (timeout == 100) {
+			//could be stale grab another
+			//read the 28 bit result
+			reading = read16FDC(FDC2212_DATA_CH0_REGADDR) << 16;
+			reading |= read16FDC(FDC2212_DATA_LSB_CH0_REGADDR);
+			while (timeout && !(status & FDC2212_CH0_UNREADCONV)) {
+//        Serial.println("status: " + String(status));
+				status = read16FDC(FDC2212_STATUS_REGADDR);
+				timeout--;
+			}
+		}
+		if (timeout) {
+			//read the 28 bit result
+			reading = read16FDC(FDC2212_DATA_CH0_REGADDR) << 16;
+			reading |= read16FDC(FDC2212_DATA_LSB_CH0_REGADDR);
+
+			if(lastReading==0)
+			{
+				lastReading = reading;
+			}
+
+			this->dCap_dT = ((float)reading - (float)this->lastReading)/((float)(HAL_GetTick()) - this->lastReadingTick);
+
+			this->lastReadingTick = HAL_GetTick();
+		} else {
+			//error not reading
+			//printUsb("error reading fdc");
+			reading = 0;
+		}
+
+		if (reading < capMin)
+			capMin = reading;
+		if (reading > capMax)
+			capMax = reading;
 	}
-	if (timeout) {
-		//read the 28 bit result
-		reading = read16FDC(FDC2212_DATA_CH0_REGADDR) << 16;
-		reading |= read16FDC(FDC2212_DATA_LSB_CH0_REGADDR);
-		return reading;
-	} else {
-		//error not reading
-		//printUsb("error reading fdc");
-		return 0;
-	}
+	this->shouldread = false;
+	this->isReading = false;
+	return reading;
 }
 
 ///**************************************************************************/
@@ -350,4 +383,8 @@ void FDC2212::write16FDC(uint16_t REG_CHIP_MEM_ADDR, uint16_t value) {
 		}
 	}
 
+}
+
+void FDC2212::shouldRead() {
+	this->shouldread = true;
 }

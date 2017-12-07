@@ -12,13 +12,14 @@
 extern "C" {
 #endif
 
+#include "stdint.h"
 #include "stm32f3xx_hal.h"
-#define BOTH 0
-#define LEFT 1
-#define RIGHT 2
+#include "stm32f3xx_hal_tim.h"
+#include "limits.h"
+#include "MiniPID.h"
+#include "FDC2212.h"
 
 class ButtonControl {
-
 public:
 	ButtonControl();
 	virtual ~ButtonControl();
@@ -27,19 +28,31 @@ public:
 
 	void button1();
 	void button2();
-	void valueReceived(long value);
+	void valueReceived(float value);
+	void blinkLed(uint8_t);
+
+	enum mode {
+		left = 1, right = 2, both = 4
+	} currentMode;
+
+	enum position {
+		top = 1, bottom = 2
+	} currentPosition;
 
 private:
+	void enableLed();
+	void disableLed();
 
 	ulong capMin;
 	ulong capMax;
-	long capLimit = 27384125;   // touched: 26646406, nottouched: 28121845
+	float dCap_dT_trigger = 0;   // touched: 26646406, nottouched: 28121845
 	long timeCapStart;
 	long timeCapEnd;
-	uint8_t mode;
+	position lastSetPosition;
+	long botomPosition;
+	long topPosition;
 
 	static ButtonControl* instance;
-
 };
 
 #ifdef __cplusplus

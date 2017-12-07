@@ -49,6 +49,8 @@
 /* Includes ------------------------------------------------------------------*/
 
 /* Includes ------------------------------------------------------------------*/
+#include <vector>
+#include <string>
 
 #include <numeric>
 #include "main.h"
@@ -57,18 +59,18 @@
 #include "MiniPID.h"
 
 /* USER CODE BEGIN Includes */
-#include "PID_v1.h"
 #include "FDC2212.h"
 #include "../Drivers/STM32F3xx_HAL_Driver/Inc/Legacy/stm32_hal_legacy.h"
 #include "stm32f303xc.h"
 #include "math.h"
 #include "usbd_cdc_if.h"
 #include "time.h"
+#include "ButtonControl.h"
 
 #define IRQ_STATE_DISABLED (0x00000001)
 #define IRQ_STATE_ENABLED  (0x00000000)
 static inline uint8_t query_irq(void) {
-    return __get_PRIMASK();
+	return __get_PRIMASK();
 }
 
 #define SIXSECONDS (6*1000L) // three seconds are 3000 milliseconds
@@ -88,8 +90,6 @@ uint32_t g_MeasurementNumber3;
 uint16_t ocda_cnt[10];
 uint16_t ocdb_cnt[10];
 bool stopped = false;
-
-
 
 /* Exported macro ------------------------------------------------------------*/
 #define COUNTOF(__BUFFER__)   (sizeof(__BUFFER__) / sizeof(*(__BUFFER__)))
@@ -221,7 +221,6 @@ uint32_t last1seconds;
 bool prvic = false;
 bool slowStopDone = false;
 uint8_t previousButton = 0;
-bool inPidCorrection = false;
 
 bool safeMode = false;
 int32_t i_emergStop = 0;
@@ -244,6 +243,7 @@ float adc3Average, adc1Average;
 float aggKp = 60, aggKi = 40, aggKd = 1.5;
 
 float Setpoint1 = 32768;
+float Setpoint2 = 32768;
 float Input1 = 32768;
 float Output2;
 float Input2 = 32768;
@@ -262,6 +262,16 @@ int posDelta;
 uint32_t i = 0;
 
 TIM_HandleTypeDef s_TimerInstance;
+
+#define MIN(a, b)  (((a) < (b)) ? (a) : (b))
+#define MAX(a, b)  (((a) > (b)) ? (a) : (b))
+
+// https://blog.feabhas.com/2013/02/developing-a-generic-hard-fault-handler-for-arm-cortex-m3cortex-m4/
+void HardFault_Handler(void)
+{
+  __ASM volatile("BKPT #01");
+  while(1);
+}
 
 static int8_t sign(float val1, float val2) {
 	if (val1 > val2)
@@ -309,24 +319,24 @@ void testPWMs() {
 // 310 mV padca na 1kOhm uporu
 // I=U/R -> I = 0.310 V/1000 Ohm = 0.000310 A = 0.3 mA
 void HAL_Delay(__IO uint32_t Delay) {
-  if (query_irq() == IRQ_STATE_ENABLED) {
-        // IRQs enabled, so can use systick counter to do the delay
-        extern __IO uint32_t uwTick;
-        uint32_t start = uwTick;
-        // Wraparound of tick is taken care of by 2's complement arithmetic.
-        while (uwTick - start < Delay) {
-            // Enter sleep mode, waiting for (at least) the SysTick interrupt.
-            __WFI();
-        }
-    } else {
-        // IRQs disabled, so need to use a busy loop for the delay.
-        // To prevent possible overflow of the counter we use a double loop.
-        const uint32_t count_1ms = HAL_RCC_GetSysClockFreq() / 4000;
-        for (int i = 0; i < Delay; i++) {
-            for (uint32_t count = 0; ++count <= count_1ms;) {
-            }
-        }
-    }
+	if (query_irq() == IRQ_STATE_ENABLED) {
+		// IRQs enabled, so can use systick counter to do the delay
+		extern __IO uint32_t uwTick;
+		uint32_t start = uwTick;
+		// Wraparound of tick is taken care of by 2's complement arithmetic.
+		while (uwTick - start < Delay) {
+			// Enter sleep mode, waiting for (at least) the SysTick interrupt.
+			__WFI();
+		}
+	} else {
+		// IRQs disabled, so need to use a busy loop for the delay.
+		// To prevent possible overflow of the counter we use a double loop.
+		const uint32_t count_1ms = HAL_RCC_GetSysClockFreq() / 4000;
+		for (int i = 0; i < Delay; i++) {
+			for (uint32_t count = 0; ++count <= count_1ms;) {
+			}
+		}
+	}
 }
 
 uint8_t printUsb(const char* buf) {
@@ -521,7 +531,7 @@ void readAdc() {
 
 /* USER CODE END 0 */
 char buf15[20];
-long capValue;
+unsigned long capValue;
 
 int main(void) {
 
@@ -598,10 +608,8 @@ int main(void) {
 	myPID2.setOutputRampRate(0.52);
 	//myPID2.SetAccelerationLimits(-0.5, 0.5);
 
-
 	capSense = FDC2212(I2cHandle);
 	capSense.begin();
-
 
 	HAL_TIM_Base_Start(&htim1);
 	HAL_TIM_Base_Start(&htim8);
@@ -621,14 +629,15 @@ int main(void) {
 	htim3.Instance->CNT = 32768;
 	htim4.Instance->CNT = 32768;
 	Setpoint1 = 32768;
+	Setpoint2 = 32768;
 
 //printUsb("TableLifter Init finished.\n\r");
 
 	if (HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL) != HAL_OK) {
-		printUsb("Error starting encoder 3");
+		//printUsb("Error starting encoder 3");
 	}
 	if (HAL_TIM_Encoder_Start(&htim4, TIM_CHANNEL_ALL) != HAL_OK) {
-		printUsb("Error starting encoder 4");
+		//printUsb("Error starting encoder 4");
 	}
 
 //HAL_Delay(100);
@@ -647,6 +656,10 @@ int main(void) {
 
 		/* USER CODE BEGIN 3 */
 		i++;
+		if (capSense.initialized && capSense.shouldread) {
+			capValue = capSense.getReading();
+			ButtonControl::getInstance()->valueReceived(capValue);
+		}
 
 //		bool controlPower1 = false;
 //		if (controlPower1) {
@@ -680,17 +693,17 @@ int main(void) {
 		// we end program
 		// and signal with blinking led
 		if (ocda_cnt[cnt_10sec] > 3000 || ocdb_cnt[cnt_10sec] > 3000) {
-			sprintf(buffer, "Resetted. %d %d\n", ocda_cnt[cnt_10sec], ocdb_cnt[cnt_10sec]);
-			printUsb(buffer);
+			//sprintf(buffer, "Resetted. %d %d\n", ocda_cnt[cnt_10sec], ocdb_cnt[cnt_10sec]);
+			//printUsb(buffer);
 
 			/*
-			fastStop();
-			stopped = true;
-			while (true) {
-				HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-				HAL_Delay(100);
-			}
-			*/
+			 fastStop();
+			 stopped = true;
+			 while (true) {
+			 HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+			 HAL_Delay(100);
+			 }
+			 */
 		}
 
 //		if (HAL_GetTick() - last6seconds >= SIXSECONDS) {
@@ -712,7 +725,7 @@ int main(void) {
 				inPosition1++;
 			else
 				inposition1 = 0;
-			if (abs(Setpoint1 - Input2) < 2)
+			if (abs(Setpoint2 - Input2) < 2)
 				inPosition2++;
 			else
 				inposition2 = 0;
@@ -729,9 +742,14 @@ int main(void) {
 				iOfStandStill = i;
 		}
 
+		if (abs(Setpoint1 - Input1) > 2)
+			myPID1.setMode(AUTOMATIC);
+		if (abs(Setpoint2 - Input2) > 2)
+			myPID2.setMode(AUTOMATIC);
+
 		if (emergencyStop && (i - i_emergStop) > 10000) {
 			//reset stepper drivers BTM7752G
-			if (abs(Setpoint1 - Input1) < 3 && abs(Setpoint1 - Input2) < 3) {
+			if (abs(Setpoint1 - Input1) < 3 && abs(Setpoint2 - Input2) < 3) {
 				if (alreadyResetted != 1) {
 					resetPwm(i);
 				}
@@ -743,13 +761,8 @@ int main(void) {
 		Input1 = htim4.Instance->CNT;
 		Input2 = htim3.Instance->CNT;
 
-		if (inPidCorrection == false)
-			if (Input1 == Setpoint1)
-				inPidCorrection = true;
-
 		if (button2On == 1 && !emergencyStop) {
 			// UP BUTTON PRESSED
-			inPidCorrection = false;
 			alreadyResetted = 0;
 			if (prvic == false && previousButton != 2) {
 				resetPwm(i);
@@ -760,14 +773,20 @@ int main(void) {
 				inPosition2 = 0;
 			}
 			//if (Setpoint1 < Input2 + 40) {
-			Setpoint1 = Setpoint1 + 0.1;
+			if (ButtonControl::getInstance()->currentMode == ButtonControl::mode::left)
+				Setpoint1 = Setpoint1 + 0.1;
+			else if (ButtonControl::getInstance()->currentMode == ButtonControl::mode::right)
+				Setpoint2 = Setpoint2 + 0.1;
+			else if (ButtonControl::getInstance()->currentMode == ButtonControl::mode::both) {
+				Setpoint1 = Setpoint1 + 0.1;
+				Setpoint2 = Setpoint2 + 0.1;
+			}
 			//}
 			previousButton = 2;
 			iOfStandStill = 0;
 		}
 
 		if (button1On == 1 && !emergencyStop) {
-			inPidCorrection = false;
 			// DOWN BUTTON PRESSED
 			alreadyResetted = 0;
 			if (prvic == false && previousButton != 1) {
@@ -779,7 +798,15 @@ int main(void) {
 				inPosition2 = 0;
 			}
 			//if (Setpoint1 > Input2 - 40) {
-			Setpoint1 = Setpoint1 - 0.1;
+			if (ButtonControl::getInstance()->currentMode == ButtonControl::left)
+				Setpoint1 = Setpoint1 - 0.1;
+			else if (ButtonControl::getInstance()->currentMode == ButtonControl::right)
+				Setpoint2 = Setpoint2 - 0.1;
+			else if (ButtonControl::getInstance()->currentMode == ButtonControl::both) {
+				Setpoint1 = Setpoint1 - 0.1;
+				Setpoint2 = Setpoint2 - 0.1;
+			}
+
 			//}
 			previousButton = 1;
 			iOfStandStill = 0;
@@ -788,27 +815,23 @@ int main(void) {
 		posDelta = static_cast<int>(round(Input2) - round(Input1));
 
 		Output1 = myPID1.getOutput(round(Input1), round(Setpoint1));
-		Output2 = myPID2.getOutput(round(Input2), round(Setpoint1));
+		Output2 = myPID2.getOutput(round(Input2), round(Setpoint2));
 
-		//int8_t sign1 = sign(Output1 + posDelta * 20, Output1_adj);
-		//Output1_adj = Output1_adj + sign1 * speedRamp;
-		//double maxDeltaCorrection = PWM_RES - myPID1.getMaxOutput();
-		// uint8_t OutDelta = clamp(posDelta * 20, -maxDeltaCorrection, maxDeltaCorrection);
-		double maxSpeedDiffOutput = clamp((double) posDelta * 35, -(double) speedCompensation, (double) speedCompensation);
+		double maxSpeedDiffOutput = 0;
+		if (ButtonControl::getInstance()->currentMode == ButtonControl::both)
+			maxSpeedDiffOutput = clamp((double) posDelta * 35, -(double) speedCompensation, (double) speedCompensation);
+
 		/*
-		if (abs(posDelta) > 3) {
-			fastStop();
-			stopped = true;
-			while (true) {
-				HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-				HAL_Delay(50);
-			}
-		}
-		*/
+		 if (abs(posDelta) > 3) {
+		 fastStop();
+		 stopped = true;
+		 while (true) {
+		 HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+		 HAL_Delay(50);
+		 }
+		 }
+		 */
 		Output1_adj = Output1 + maxSpeedDiffOutput; //+ (maxDeltaCorrection - abs(OutDelta)) + OutDelta;
-
-		//int8_t sign2 = sign(Output2 - posDelta * 20, Output2_adj);
-		//Output2_adj = Output2_adj + sign2 * speedRamp;
 		Output2_adj = Output2 - maxSpeedDiffOutput; // + (maxDeltaCorrection - abs(OutDelta)) - OutDelta;		// - posDelta * 20;
 
 		Output1_adj = clamp(Output1_adj, -(double) PWM_RES, (double) PWM_RES);
@@ -838,7 +861,7 @@ int main(void) {
 			__HAL_TIM_SetCompare(&htim8, TIM_CHANNEL_2, 0);
 		}
 
-		if (i % 100 == 0) {  // print reasults over usb every 300ms
+		if (i % 50 == 0) {  // print reasults over usb every 300ms
 			SerialReceive();
 			buildAndSendBuffer();
 			//char buffer1[20] = { "" };
@@ -849,6 +872,18 @@ int main(void) {
 	}
 }
 
+std::vector<std::string> split(char* mystr, const char *delimiter) {
+	std::vector<std::string> tokens;
+	char newStr[280];
+	strcpy(newStr, mystr);
+
+	char *token = strtok(newStr, delimiter);
+	while (token != NULL) {
+		tokens.push_back(token);
+		token = strtok(NULL, delimiter);
+	}
+	return tokens;
+}
 /* USER CODE END 3 */
 
 void slowStop() {
@@ -887,10 +922,11 @@ void fastStop() {
 }
 
 void buildAndSendBuffer() {
+
 	char f1[10];
 	char f2[10];
 	char f3[10];
-	sprintf(buffer, "sp=%s, input=%s, output=%s\n\r", ftoa(f1, Setpoint1, 3), ftoa(f2, Input1, 3), ftoa(f3, Output2, 3));
+	//sprintf(buffer, "sp=%s, input=%s, output=%s ", ftoa(f1, Setpoint1, 3), ftoa(f2, Input1, 3), ftoa(f3, Output2, 3));
 
 	strcpy(buffer, "PID ");
 	strcat(buffer, ftoa(f1, round(Setpoint1), 3));
@@ -912,9 +948,9 @@ void buildAndSendBuffer() {
 	strcat(buffer, " ");
 
 	if (myPID1.getMode() == AUTOMATIC)
-		strcat(buffer, "Automatic");
+	strcat(buffer, "Automatic");
 	else
-		strcat(buffer, "Manual");
+	strcat(buffer, "Manual");
 
 	strcat(buffer, " ");
 
@@ -926,7 +962,7 @@ void buildAndSendBuffer() {
 	strcat(buffer, " ");
 
 	char buf1[10] = "";
-	ftoa(buf1, g_ADCValue / 65535 * 1000, 2);
+	ftoa(buf1, (double) g_ADCValue / 65535 * 1000, 2);
 	strcat(buffer, buf1);
 
 	strcat(buffer, " ");
@@ -948,16 +984,24 @@ void buildAndSendBuffer() {
 	ftoa(f5, g_ADCValue3 / 65535 * 1000, 2);
 	strcat(buffer, f5);
 
-	sprintf(buf3, " %lu", capValue);
-	strcat(buffer, buf3);
+	char buf6[15] = "";
+	ftoa(buf6, ((double) capValue / capSense.capMax) * (double) 1000, 2);
+	strcat(buffer, " ");
+	strcat(buffer, buf6);
 
 	strcat(buffer, "\n");
 
-	if (g_ADCValue > 0) {
-		asm("nop");
-	}
-
 	if (strcmp(prev_buffer, buffer) != 0) {
+		/*
+		const char delimit[] = " ";
+		std::vector<std::string> tokens = split(buffer, delimit);
+		int size = tokens.size();
+		if(tokens.size()!=16)
+		{
+			__WFI();
+		}
+		*/
+
 		printUsb(buffer);
 		int8_t len = strlen(buffer);
 		strncpy(prev_buffer, buffer, len);

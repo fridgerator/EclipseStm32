@@ -46,9 +46,9 @@ extern volatile uint8_t ocda;
 extern volatile uint8_t ocdb;
 extern FDC2212 capSense;
 extern long capValue;
-bool reading;
 
 extern TIM_HandleTypeDef htim2;
+bool reading;
 
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
@@ -78,17 +78,8 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	if (HAL_GPIO_ReadPin(CAPSense_GPIO_Port, CAPSense_Pin) == GPIO_PIN_RESET) {
 		// read capacity value
 		//long tick1 = HAL_GetTick();
-		if (capSense.initialized && !reading) {
-			reading = true;
-			capValue = capSense.getReading();
-			if (capValue != 0) {
-				ButtonControl::getInstance()->valueReceived(capValue);
-				//long tick2 = HAL_GetTick();
-				//long difTick = tick2 - tick1;
-				//sprintf(buf15, "Cap value0= %d value1= %lu\n", i2cMeasure, capValue);
-				//printUsb(buf15);
-			}
-			reading = false;
+		if (capSense.initialized) {
+			capSense.shouldRead();
 		}
 
 	}
@@ -325,8 +316,11 @@ void EXTI15_10_IRQHandler(void) {
 	/* USER CODE BEGIN EXTI15_10_IRQn 0 */
 
 	/* USER CODE END EXTI15_10_IRQn 0 */
+	//HAL_NVIC_DisableIRQ(EXTI15_10_IRQn);
 	HAL_GPIO_EXTI_IRQHandler(CAPSense_Pin);
 	HAL_GPIO_EXTI_IRQHandler(Button2_Pin);
+	//HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
+
 	/* USER CODE BEGIN EXTI15_10_IRQn 1 */
 
 	/* USER CODE END EXTI15_10_IRQn 1 */

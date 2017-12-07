@@ -10,6 +10,8 @@
 
 #include "stm32f3xx_hal.h"
 #include <stdint.h>
+#include "limits.h"
+
 
 #define FDC2214_I2C_ADDRESS   0x2A
 // Address is 0x2A (default) or 0x2B (if ADDR is high)
@@ -45,9 +47,14 @@ public:
 		FDC2212();
 		FDC2212(I2C_HandleTypeDef i2cHandle);
     bool begin(void);
-    double readCapacitance();
-    unsigned long getReading();
+    ulong getReading();
     bool initialized;
+    void shouldRead();
+    bool shouldread;
+    unsigned long capMax;
+    unsigned long capMin;
+    float dCap_dT;
+    static FDC2212 *getInstance();
 
 private:
     void loadSettings(void);
@@ -60,6 +67,13 @@ private:
     uint8_t read8FDC(uint16_t address);
     uint8_t _i2caddr;
     I2C_HandleTypeDef _i2cHandle;
+    unsigned long lastReading;
+    long lastReadingTick;
+    double angle;
+
+    bool isReading;
+
+    static FDC2212* instance;
 };
 
 #endif /* FDC2212_H_ */
