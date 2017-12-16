@@ -31,7 +31,7 @@ FDC2212::FDC2212() {
 
 FDC2212::FDC2212(I2C_HandleTypeDef i2cHandle) {
 	instance = FDC2212::getInstance();
-	_i2cHandle = i2cHandle;
+	instance->_i2cHandle = i2cHandle;
 }
 
 /**************************************************************************/
@@ -43,8 +43,8 @@ bool FDC2212::begin(void) {
 	//Wire.begin();
 	uint8_t aRxBuffer[2];
 	uint16_t REG_CHIP_MEM_ADDR = 0x7e;
-	if (HAL_I2C_Mem_Read(&_i2cHandle, _i2caddr, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, 10000) != HAL_OK) {
-		if (HAL_I2C_GetError(&_i2cHandle) != HAL_I2C_ERROR_AF) {
+	if (HAL_I2C_Mem_Read(&this->instance->_i2cHandle, this->instance->_i2caddr, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, 10000) != HAL_OK) {
+		if (HAL_I2C_GetError(&this->instance->_i2cHandle) != HAL_I2C_ERROR_AF) {
 			_Error_Handler(__FILE__, __LINE__);
 		}
 	}
@@ -334,8 +334,8 @@ uint16_t FDC2212::read16FDC(uint16_t address) {
 	 return data;
 	 */
 	uint8_t aRxBuffer[2];
-	if (HAL_I2C_Mem_Read(&_i2cHandle, _i2caddr, address, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, 100) != HAL_OK) {
-		if (HAL_I2C_GetError(&_i2cHandle) != HAL_I2C_ERROR_AF) {
+	if (HAL_I2C_Mem_Read(&this->instance->_i2cHandle, this->instance->_i2caddr, address, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, 100) != HAL_OK) {
+		if (HAL_I2C_GetError(&this->instance->_i2cHandle) != HAL_I2C_ERROR_AF) {
 			//Error_Handler();
 		}
 	}
@@ -355,8 +355,8 @@ void FDC2212::write8FDC(uint16_t address, uint8_t data) {
 	 Wire.endTransmission();
 	 */
 
-	if (HAL_I2C_Mem_Write(&_i2cHandle, _i2caddr, address, sizeof(uint8_t), &data, 1, 100) != HAL_OK) {
-		if (HAL_I2C_GetError(&_i2cHandle) != HAL_I2C_ERROR_AF) {
+	if (HAL_I2C_Mem_Write(&this->instance->_i2cHandle, this->instance->_i2caddr, address, sizeof(uint8_t), &data, 1, 100) != HAL_OK) {
+		if (HAL_I2C_GetError(&this->instance->_i2cHandle) != HAL_I2C_ERROR_AF) {
 			Error_Handler();
 		}
 	}
@@ -377,8 +377,8 @@ void FDC2212::write8FDC(uint16_t address, uint8_t data) {
 //}
 void FDC2212::write16FDC(uint16_t REG_CHIP_MEM_ADDR, uint16_t value) {
 	uint8_t aTxBuffer[2] = { (value >> 8), (value & 0xFF), };
-	if (HAL_I2C_Mem_Write(&_i2cHandle, _i2caddr, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer, 2, 10000) != HAL_OK) {
-		if (HAL_I2C_GetError(&_i2cHandle) != HAL_I2C_ERROR_AF) {
+	if (HAL_I2C_Mem_Write(&this->instance->_i2cHandle, this->instance->_i2caddr, REG_CHIP_MEM_ADDR, I2C_MEMADD_SIZE_8BIT, aTxBuffer, 2, 10000) != HAL_OK) {
+		if (HAL_I2C_GetError(&this->instance->_i2cHandle) != HAL_I2C_ERROR_AF) {
 			Error_Handler();
 		}
 	}

@@ -57,6 +57,10 @@
 
 /* Private define ------------------------------------------------------------*/
 
+#define SWO_Pin GPIO_PIN_3
+#define SWO_GPIO_Port GPIOB
+
+
 #define PWM1_Pin GPIO_PIN_13
 #define PWM1_GPIO_Port GPIOC
 #define INH2_Pin GPIO_PIN_4
