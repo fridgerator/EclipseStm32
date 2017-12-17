@@ -556,7 +556,7 @@ void printSwo(const char * msg)
       ITM_SendChar(*msg);
       ++msg;
    }
-   ITM_SendChar(' ');
+   //ITM_SendChar(' ');
 }
 
 /* USER CODE END 0 */
@@ -700,12 +700,14 @@ int main(void) {
 		i++;
 		if (capSense.initialized && capSense.shouldread) {
 			capValue = capSense.getReading();
-			ITM_SendChar(capValue);
-			ITM_SendChar(' ');
+			//ITM_SendChar(capValue);
+			//ITM_SendChar(' ');
 			//char const *c = reinterpret_cast<char const *>(capValue);
 			//ITM_SendChar(*c);
 			//ITM_SendChar(*c++);
-			//sprintf(buf1,"%d",capValue);
+			sprintf(buf1,"%lu\n",capValue);
+			printUsb(buf1);
+			//printSwo(buf1);
 			ButtonControl::getInstance()->valueReceived(capValue);
 		}
 
@@ -1057,7 +1059,7 @@ void buildAndSendBuffer() {
 		 }
 		 */
 
-		printUsb(buffer);
+		//printUsb(buffer);
 		int8_t len = strlen(buffer);
 		strncpy(prev_buffer, buffer, len);
 	}
