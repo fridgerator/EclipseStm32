@@ -12,14 +12,27 @@
 extern "C" {
 #endif
 
+#include "main.h"
 #include "stdint.h"
 #include "stm32f3xx_hal.h"
 #include "stm32f3xx_hal_tim.h"
 #include "limits.h"
-#include "MiniPID.h"
+#include "math.h"
+
 #include "FDC2212.h"
 
+extern TIM_HandleTypeDef htim2;
+extern TIM_HandleTypeDef htim4;
+extern TIM_HandleTypeDef htim3;
+extern float Input1;
+extern float Input2;
+extern float Setpoint1;
+extern float Setpoint2;
+extern uint8_t printUsb(const char* buf);
+extern char *ftoa(char *a, double f, int precision);
+
 class ButtonControl {
+
 public:
 	ButtonControl();
 	virtual ~ButtonControl();
@@ -29,7 +42,6 @@ public:
 	void button1();
 	void button2();
 	void valueReceived(float value);
-	void blinkLed(uint8_t);
 
 	enum mode {
 		left = 1, right = 2, both = 4
@@ -39,8 +51,13 @@ public:
 		top = 1, bottom = 2
 	} currentPosition;
 
+	uint8_t ledBlinkCount;
+	uint8_t currentBlinkNo;
+
 private:
 	void enableLed();
+	void enableLed(uint32_t);
+	void enableLed(uint32_t, uint8_t);
 	void disableLed();
 
 	ulong capMin;
@@ -51,8 +68,11 @@ private:
 	position lastSetPosition;
 	long botomPosition;
 	long topPosition;
+	double v;
+	double X;
 
 	static ButtonControl* instance;
+
 };
 
 #ifdef __cplusplus

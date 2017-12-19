@@ -1,11 +1,13 @@
 // npm install chart.js
 // npm install serialport
+// sudo apt-get install libudev-dev
+// npm install usb
 // npm install socket.io
 // npm install -g socket.io
 // npm install @types/socket.io-client --save
 // npm install express
 
-
+// start with: node usb-chart.js
 
 
 //idVendor           0x0483 STMicroelectronics
@@ -39,7 +41,7 @@ io.on('connection', function(socket){
   console.log('a user connected');
 });
 http.listen(8080, function(){
-  console.log('listening on *:3000');
+  console.log('listening on *:8080');
 });
 
 
@@ -49,6 +51,13 @@ socket.on('connect', function(){});
 socket.on('event', function(data){});
 socket.on('disconnect', function(){});
 
+
+
+
+
+/*
+// serial port version START
+
 const SerialPort = require('serialport');
 const parsers = SerialPort.parsers;
 
@@ -57,7 +66,7 @@ const parser = new parsers.Readline({
   delimiter: '\n'
 });
 
-const port = new SerialPort('/dev/ttyACM0', {
+const port = new SerialPort('/dev/ttyACM2', {
   baudRate: 115200
 });
 
@@ -66,7 +75,65 @@ port.on('open', () => console.log('Port open'));
 
 
 parser.on('data', function(data) {
-    //console.log(data);
+  //console.log(data);
+  if(data.startsWith("ButtonControl"))
+    console.log(data);
+  else
     io.emit('message',data);
 });
+*/
+
+// serial port version END
+
+
+
+
+
+const usb = require("usb");
+usb.setDebugLevel(4);
+var dev = usb.findByIds(0x0483, 0x5740);
+
+console.log("Descriptor_______________");
+console.log(dev.configDescriptor);
+
+
+console.log("OPEN____________");
+dev.open();
+
+
+var iface = dev.interfaces[0];
+var driverAttached = false;
+
+if (iface.isKernelDriverActive()) {
+   driverAttached = true;
+   iface.detachKernelDriver();
+}
+
+
+console.log("Interfaces_______________");
+console.log("Kernel driver active? " + iface.isKernelDriverActive());
+
+
+iface.claim();
+var inEndpoint = iface.endpoints[0];
+
+console.log("InEndpoint descriptor______");
+console.log(inEndpoint.descriptor);
+
+inEndpoint.startPoll(1, 1);
+inEndpoint.on('data',function(d)
+{
+  console.log(d);
+}
+);
+inEndpoint.on('error',function(err)
+{
+  console.log("Pol error" + err);
+}
+);
+inEndpoint.on('end',function()
+{
+  console.log("Pol END");
+}
+);
 

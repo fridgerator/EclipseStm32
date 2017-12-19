@@ -48,6 +48,9 @@
 /* Define to prevent recursive inclusion -------------------------------------*/
 #ifndef __MAIN_H
 #define __MAIN_H
+
+#define Error_Handler() _Error_Handler(__FILE__, __LINE__)
+
   /* Includes ------------------------------------------------------------------*/
 
 /* Includes ------------------------------------------------------------------*/
@@ -56,6 +59,9 @@
 /* USER CODE END Includes */
 
 /* Private define ------------------------------------------------------------*/
+
+/* USER CODE BEGIN Includes */
+#include <stdint.h>
 
 #define SWO_Pin GPIO_PIN_3
 #define SWO_GPIO_Port GPIOB
@@ -112,11 +118,13 @@
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
- extern "C" {
+extern "C" {
 #endif
+uint8_t printUsb(const char* buf);
+char *ftoa(char *a, double f, int precision);
+
 void _Error_Handler(char *, int);
 
-#define Error_Handler() _Error_Handler(__FILE__, __LINE__)
 #ifdef __cplusplus
 }
 #endif
@@ -131,3 +139,4 @@ void _Error_Handler(char *, int);
 
 #endif /* __MAIN_H */
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
+

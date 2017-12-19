@@ -49,16 +49,11 @@
 /* Includes ------------------------------------------------------------------*/
 
 /* Includes ------------------------------------------------------------------*/
+#include "main.h"
 #include <vector>
 #include <string>
-
 #include <numeric>
-#include "main.h"
-#include "stm32f3xx_hal.h"
-#include "usb_device.h"
-#include "MiniPID.h"
 
-/* USER CODE BEGIN Includes */
 #include "FDC2212.h"
 #include "../Drivers/STM32F3xx_HAL_Driver/Inc/Legacy/stm32_hal_legacy.h"
 #include "stm32f303xc.h"
@@ -66,6 +61,10 @@
 #include "usbd_cdc_if.h"
 #include "time.h"
 #include "ButtonControl.h"
+#include "stm32f3xx_hal_dma.h"
+#include "stm32f3xx_hal.h"
+#include "usb_device.h"
+#include "MiniPID.h"
 
 #define IRQ_STATE_DISABLED (0x00000001)
 #define IRQ_STATE_ENABLED  (0x00000000)
@@ -342,8 +341,7 @@ void HAL_Delay(__IO uint32_t Delay) {
 uint8_t printUsb(const char* buf) {
 	uint16_t Len = strlen(buf);
 
-	if (hUsbDeviceFS.dev_address
-			!= 0&& hUsbDeviceFS.dev_state == USBD_STATE_CONFIGURED) {
+	if (hUsbDeviceFS.dev_address != 0 && hUsbDeviceFS.dev_state == USBD_STATE_CONFIGURED) {
 		uint8_t UserTxBufferFS[255];
 		memcpy(UserTxBufferFS, buf, sizeof(char) * Len);
 		USBD_CDC_SetTxBuffer(&hUsbDeviceFS, UserTxBufferFS, Len);
@@ -428,29 +426,30 @@ uint8_t hal_direction_status(ADC_HandleTypeDef *hadc) {
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
-	if (htim->Instance == TIM2)
+	if (htim->Instance == TIM2) {
+		if (ButtonControl::getInstance()->ledBlinkCount > 0) {
+			ButtonControl::getInstance()->currentBlinkNo++;
+			if (ButtonControl::getInstance()->currentBlinkNo >= ButtonControl::getInstance()->ledBlinkCount) {
+				ButtonControl::getInstance()->ledBlinkCount = 0;
+				ButtonControl::getInstance()->currentBlinkNo = 0;
+				HAL_TIM_Base_Stop_IT(&htim2);
+			}
+		}
 		HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+	}
 }
 
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
 	if (hal_direction_status(hadc) == 0) {
 		if (hadc->Instance == hadc1.Instance) {
-			g_DmaOffsetBeforeAveragingH1 = ADC_BUFFER_LENGTH
-					- DMA1_Channel1->CNDTR;
-			g_ADCValue1 = (float) std::accumulate(DMA_ADCvalues1,
-					DMA_ADCvalues1 + ADC_BUFFER_LENGTH / 2, 0)
-					/ (ADC_BUFFER_LENGTH / 2);
-			g_DmaOffsetAfterAveragingH1 = ADC_BUFFER_LENGTH
-					- DMA1_Channel1->CNDTR;
+			g_DmaOffsetBeforeAveragingH1 = ADC_BUFFER_LENGTH - DMA1_Channel1->CNDTR;
+			g_ADCValue1 = (float) std::accumulate(DMA_ADCvalues1, DMA_ADCvalues1 + ADC_BUFFER_LENGTH / 2, 0) / (ADC_BUFFER_LENGTH / 2);
+			g_DmaOffsetAfterAveragingH1 = ADC_BUFFER_LENGTH - DMA1_Channel1->CNDTR;
 			g_MeasurementNumber1 += ADC_BUFFER_LENGTH / 2;
 		} else if (hadc->Instance == hadc3.Instance) {
-			g_DmaOffsetBeforeAveragingH3 = ADC_BUFFER_LENGTH
-					- DMA2_Channel5->CNDTR;
-			g_ADCValue3 = (float) std::accumulate(DMA_ADCvalues3,
-					DMA_ADCvalues3 + ADC_BUFFER_LENGTH / 2, 0)
-					/ (ADC_BUFFER_LENGTH / 2);
-			g_DmaOffsetAfterAveragingH3 = ADC_BUFFER_LENGTH
-					- DMA2_Channel5->CNDTR;
+			g_DmaOffsetBeforeAveragingH3 = ADC_BUFFER_LENGTH - DMA2_Channel5->CNDTR;
+			g_ADCValue3 = (float) std::accumulate(DMA_ADCvalues3, DMA_ADCvalues3 + ADC_BUFFER_LENGTH / 2, 0) / (ADC_BUFFER_LENGTH / 2);
+			g_DmaOffsetAfterAveragingH3 = ADC_BUFFER_LENGTH - DMA2_Channel5->CNDTR;
 			g_MeasurementNumber3 += ADC_BUFFER_LENGTH / 2;
 		}
 		g_ADCValue = MAX(g_ADCValue3, g_ADCValue1);
@@ -464,24 +463,16 @@ void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
 	if (hal_direction_status(hadc) == 0) {
 		if (hadc->Instance == hadc1.Instance) {
-			g_DmaOffsetBeforeAveragingF1 = ADC_BUFFER_LENGTH
-					- DMA1_Channel1->CNDTR;
-			g_ADCValue1 = (float) std::accumulate(
-					DMA_ADCvalues1 + ADC_BUFFER_LENGTH / 2,
-					DMA_ADCvalues1 + ADC_BUFFER_LENGTH, 0)
+			g_DmaOffsetBeforeAveragingF1 = ADC_BUFFER_LENGTH - DMA1_Channel1->CNDTR;
+			g_ADCValue1 = (float) std::accumulate(DMA_ADCvalues1 + ADC_BUFFER_LENGTH / 2, DMA_ADCvalues1 + ADC_BUFFER_LENGTH, 0)
 					/ (ADC_BUFFER_LENGTH / 2);
-			g_DmaOffsetAfterAveragingF1 = ADC_BUFFER_LENGTH
-					- DMA1_Channel1->CNDTR;
+			g_DmaOffsetAfterAveragingF1 = ADC_BUFFER_LENGTH - DMA1_Channel1->CNDTR;
 			g_MeasurementNumber1 += ADC_BUFFER_LENGTH / 2;
 		} else if (hadc->Instance == hadc3.Instance) {
-			g_DmaOffsetBeforeAveragingF3 = ADC_BUFFER_LENGTH
-					- DMA2_Channel5->CNDTR;
-			g_ADCValue3 = (float) std::accumulate(
-					DMA_ADCvalues3 + ADC_BUFFER_LENGTH / 2,
-					DMA_ADCvalues3 + ADC_BUFFER_LENGTH, 0)
+			g_DmaOffsetBeforeAveragingF3 = ADC_BUFFER_LENGTH - DMA2_Channel5->CNDTR;
+			g_ADCValue3 = (float) std::accumulate(DMA_ADCvalues3 + ADC_BUFFER_LENGTH / 2, DMA_ADCvalues3 + ADC_BUFFER_LENGTH, 0)
 					/ (ADC_BUFFER_LENGTH / 2);
-			g_DmaOffsetAfterAveragingF3 = ADC_BUFFER_LENGTH
-					- DMA2_Channel5->CNDTR;
+			g_DmaOffsetAfterAveragingF3 = ADC_BUFFER_LENGTH - DMA2_Channel5->CNDTR;
 			g_MeasurementNumber3 += ADC_BUFFER_LENGTH / 2;
 		}
 		g_ADCValue = MAX(g_ADCValue3, g_ADCValue1);
@@ -494,13 +485,11 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
 void readAdc() {
 	HAL_ADC_Start(&hadc1);
 	if (HAL_ADC_PollForConversion(&hadc1, 100000) == HAL_OK) {
-		if ((HAL_ADC_GetState(&hadc1) & HAL_ADC_STATE_REG_EOC)
-				== HAL_ADC_STATE_REG_EOC) {
+		if ((HAL_ADC_GetState(&hadc1) & HAL_ADC_STATE_REG_EOC) == HAL_ADC_STATE_REG_EOC) {
 			g_ADCValue1 = HAL_ADC_GetValue(&hadc1);
 			HAL_ADC_Start(&hadc3);
 			if (HAL_ADC_PollForConversion(&hadc3, 100000) == HAL_OK) {
-				if ((HAL_ADC_GetState(&hadc3) & HAL_ADC_STATE_REG_EOC)
-						== HAL_ADC_STATE_REG_EOC) {
+				if ((HAL_ADC_GetState(&hadc3) & HAL_ADC_STATE_REG_EOC) == HAL_ADC_STATE_REG_EOC) {
 					g_ADCValue3 = HAL_ADC_GetValue(&hadc3);
 
 					/*
@@ -550,13 +539,12 @@ void readAdc() {
 	}
 }
 
-void printSwo(const char * msg)
-{
-   while(*msg != '\0'){
-      ITM_SendChar(*msg);
-      ++msg;
-   }
-   //ITM_SendChar(' ');
+void printSwo(const char * msg) {
+	while (*msg != '\0') {
+		ITM_SendChar(*msg);
+		++msg;
+	}
+	//ITM_SendChar(' ');
 }
 
 /* USER CODE END 0 */
@@ -627,12 +615,10 @@ int main(void) {
 
 	uint8_t speedCompensation = 50;
 
-	myPID2.setOutputLimits(-(double) PWM_RES + (double) speedCompensation,
-			(double) PWM_RES - (double) speedCompensation); // .SetOutputLimits(-850.0, 850.0);
+	myPID2.setOutputLimits(-(double) PWM_RES + (double) speedCompensation, (double) PWM_RES - (double) speedCompensation); // .SetOutputLimits(-850.0, 850.0);
 	//myPID2.setOutputFilter(0.1);
 	//myPID1.SetMode(AUTOMATIC);
-	myPID1.setOutputLimits(-(double) PWM_RES + (double) speedCompensation,
-			(double) PWM_RES - (double) speedCompensation);
+	myPID1.setOutputLimits(-(double) PWM_RES + (double) speedCompensation, (double) PWM_RES - (double) speedCompensation);
 	//myPID1.setOutputFilter(0.1);
 
 	myPID1.setMaxIOutput(100);
@@ -650,12 +636,10 @@ int main(void) {
 	HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
 	HAL_ADCEx_Calibration_Start(&hadc3, ADC_SINGLE_ENDED);
 
-	if (HAL_ADC_Start_DMA(&hadc1, (uint32_t *) DMA_ADCvalues1,
-			ADC_BUFFER_LENGTH_HALFWORDS) != HAL_OK) {
+	if (HAL_ADC_Start_DMA(&hadc1, (uint32_t *) DMA_ADCvalues1, ADC_BUFFER_LENGTH_HALFWORDS) != HAL_OK) {
 		Error_Handler();
 	}
-	if (HAL_ADC_Start_DMA(&hadc3, (uint32_t *) DMA_ADCvalues3,
-			ADC_BUFFER_LENGTH_HALFWORDS) != HAL_OK) {
+	if (HAL_ADC_Start_DMA(&hadc3, (uint32_t *) DMA_ADCvalues3, ADC_BUFFER_LENGTH_HALFWORDS) != HAL_OK) {
 		Error_Handler();
 	}
 
@@ -698,15 +682,15 @@ int main(void) {
 
 		/* USER CODE BEGIN 3 */
 		i++;
-		if (capSense.initialized && capSense.shouldread) {
+		if (capSense.initialized && (capSense.shouldread || (HAL_GetTick() - capSense.lastReadingTick > 3000))) {
 			capValue = capSense.getReading();
 			//ITM_SendChar(capValue);
 			//ITM_SendChar(' ');
 			//char const *c = reinterpret_cast<char const *>(capValue);
 			//ITM_SendChar(*c);
 			//ITM_SendChar(*c++);
-			sprintf(buf1,"%lu\n",capValue);
-			printUsb(buf1);
+			//sprintf(buf1,"%lu\n",capValue);
+			//uint8_t ret = printUsb(buf1);
 			//printSwo(buf1);
 			ButtonControl::getInstance()->valueReceived(capValue);
 		}
@@ -779,11 +763,11 @@ int main(void) {
 				inPosition2++;
 			else
 				inposition2 = 0;
-			if (myPID1.getMode() == AUTOMATIC && inPosition1 > 2000) {
-				myPID1.setMode(MANUAL);
+			if (myPID1.getMode() == myPID1.AUTOMATIC && inPosition1 > 2000) {
+				myPID1.setMode(myPID1.MANUAL);
 			}
-			if (myPID2.getMode() == AUTOMATIC && inPosition2 > 2000) {
-				myPID2.setMode(MANUAL);
+			if (myPID2.getMode() == myPID1.AUTOMATIC && inPosition2 > 2000) {
+				myPID2.setMode(myPID1.MANUAL);
 			}
 
 			previousButton = 0;
@@ -793,9 +777,9 @@ int main(void) {
 		}
 
 		if (abs(Setpoint1 - Input1) > 2)
-			myPID1.setMode(AUTOMATIC);
+			myPID1.setMode(myPID1.AUTOMATIC);
 		if (abs(Setpoint2 - Input2) > 2)
-			myPID2.setMode(AUTOMATIC);
+			myPID2.setMode(myPID2.AUTOMATIC);
 
 		if (emergencyStop && (i - i_emergStop) > 10000) {
 			//reset stepper drivers BTM7752G
@@ -817,20 +801,17 @@ int main(void) {
 			if (prvic == false && previousButton != 2) {
 				resetPwm(i);
 				prvic = true;
-				myPID1.setMode(AUTOMATIC);
-				myPID2.setMode(AUTOMATIC);
+				myPID1.setMode(myPID1.AUTOMATIC);
+				myPID2.setMode(myPID2.AUTOMATIC);
 				inPosition1 = 0;
 				inPosition2 = 0;
 			}
 			//if (Setpoint1 < Input2 + 40) {
-			if (ButtonControl::getInstance()->currentMode
-					== ButtonControl::mode::left)
+			if (ButtonControl::getInstance()->currentMode == ButtonControl::mode::left)
 				Setpoint1 = Setpoint1 + 0.1;
-			else if (ButtonControl::getInstance()->currentMode
-					== ButtonControl::mode::right)
+			else if (ButtonControl::getInstance()->currentMode == ButtonControl::mode::right)
 				Setpoint2 = Setpoint2 + 0.1;
-			else if (ButtonControl::getInstance()->currentMode
-					== ButtonControl::mode::both) {
+			else if (ButtonControl::getInstance()->currentMode == ButtonControl::mode::both) {
 				Setpoint1 = Setpoint1 + 0.1;
 				Setpoint2 = Setpoint2 + 0.1;
 			}
@@ -845,20 +826,17 @@ int main(void) {
 			if (prvic == false && previousButton != 1) {
 				resetPwm(i);
 				prvic = true;
-				myPID1.setMode(AUTOMATIC);
-				myPID2.setMode(AUTOMATIC);
+				myPID1.setMode(myPID1.AUTOMATIC);
+				myPID2.setMode(myPID2.AUTOMATIC);
 				inPosition1 = 0;
 				inPosition2 = 0;
 			}
 			//if (Setpoint1 > Input2 - 40) {
-			if (ButtonControl::getInstance()->currentMode
-					== ButtonControl::left)
+			if (ButtonControl::getInstance()->currentMode == ButtonControl::left)
 				Setpoint1 = Setpoint1 - 0.1;
-			else if (ButtonControl::getInstance()->currentMode
-					== ButtonControl::right)
+			else if (ButtonControl::getInstance()->currentMode == ButtonControl::right)
 				Setpoint2 = Setpoint2 - 0.1;
-			else if (ButtonControl::getInstance()->currentMode
-					== ButtonControl::both) {
+			else if (ButtonControl::getInstance()->currentMode == ButtonControl::both) {
 				Setpoint1 = Setpoint1 - 0.1;
 				Setpoint2 = Setpoint2 - 0.1;
 			}
@@ -875,8 +853,7 @@ int main(void) {
 
 		double maxSpeedDiffOutput = 0;
 		if (ButtonControl::getInstance()->currentMode == ButtonControl::both)
-			maxSpeedDiffOutput = clamp((double) posDelta * 35,
-					-(double) speedCompensation, (double) speedCompensation);
+			maxSpeedDiffOutput = clamp((double) posDelta * 35, -(double) speedCompensation, (double) speedCompensation);
 
 		/*
 		 if (abs(posDelta) > 3) {
@@ -1004,7 +981,7 @@ void buildAndSendBuffer() {
 	strcat(buffer, ftoa(f1, myPID1.GetKd(), 3));
 	strcat(buffer, " ");
 
-	if (myPID1.getMode() == AUTOMATIC)
+	if (myPID1.getMode() == myPID1.AUTOMATIC)
 		strcat(buffer, "Automatic");
 	else
 		strcat(buffer, "Manual");
@@ -1076,8 +1053,7 @@ void buildAndSendBuffer() {
 //  18-21: float I_Param
 //  22-245: float D_Param
 void SerialReceive() {
-	if (hUsbDeviceFS.dev_address
-			!= 0&& hUsbDeviceFS.dev_state == USBD_STATE_CONFIGURED) {
+	if (hUsbDeviceFS.dev_address != 0 && hUsbDeviceFS.dev_state == USBD_STATE_CONFIGURED) {
 		uint8_t index = 0;
 		uint8_t Auto_Man = -1;
 		uint8_t Direct_Reverse = -1;
@@ -1094,8 +1070,7 @@ void SerialReceive() {
 				index++;
 			}
 
-			if ((Auto_Man == 0 || Auto_Man == 1)
-					&& (Direct_Reverse == 0 || Direct_Reverse == 1)) {
+			if ((Auto_Man == 0 || Auto_Man == 1) && (Direct_Reverse == 0 || Direct_Reverse == 1)) {
 				Setpoint1 = double(floatUnion.asFloat[0]);
 
 				//Input=double(foo.asFloat[1]);       // * the user has the ability to send the
@@ -1115,11 +1090,11 @@ void SerialReceive() {
 				myPID1.setTunings(p, i, d); //
 
 				if (Auto_Man == 0) {
-					myPID2.setMode(MANUAL); // * set the controller mode
-					myPID1.setMode(MANUAL); // * set the controller mode
+					myPID2.setMode(myPID2.MANUAL); // * set the controller mode
+					myPID1.setMode(myPID1.MANUAL); // * set the controller mode
 				} else {
-					myPID2.setMode(AUTOMATIC); //
-					myPID1.setMode(AUTOMATIC); //
+					myPID2.setMode(myPID2.AUTOMATIC); //
+					myPID1.setMode(myPID1.AUTOMATIC); //
 				}
 
 				if (Direct_Reverse == 0) {
@@ -1174,8 +1149,7 @@ void SystemClock_Config(void) {
 
 	/**Initializes the CPU, AHB and APB busses clocks
 	 */
-	RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK
-			| RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
+	RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
 	RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
 	RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
 	RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
@@ -1185,8 +1159,7 @@ void SystemClock_Config(void) {
 		_Error_Handler(__FILE__, __LINE__);
 	}
 
-	PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USB | RCC_PERIPHCLK_TIM1
-			| RCC_PERIPHCLK_TIM8 | RCC_PERIPHCLK_ADC12 | RCC_PERIPHCLK_ADC34;
+	PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USB | RCC_PERIPHCLK_TIM1 | RCC_PERIPHCLK_TIM8 | RCC_PERIPHCLK_ADC12 | RCC_PERIPHCLK_ADC34;
 	PeriphClkInit.Adc12ClockSelection = RCC_ADC12PLLCLK_DIV1;
 	PeriphClkInit.Adc34ClockSelection = RCC_ADC34PLLCLK_DIV1;
 	PeriphClkInit.USBClockSelection = RCC_USBCLKSOURCE_PLL;
@@ -1345,8 +1318,7 @@ static void MX_I2C1_Init(void) {
 
 	/**Configure Analogue filter
 	 */
-	if (HAL_I2CEx_ConfigAnalogFilter(&I2cHandle, I2C_ANALOGFILTER_ENABLE)
-			!= HAL_OK) {
+	if (HAL_I2CEx_ConfigAnalogFilter(&I2cHandle, I2C_ANALOGFILTER_ENABLE) != HAL_OK) {
 		_Error_Handler(__FILE__, __LINE__);
 	}
 
@@ -1391,8 +1363,7 @@ static void MX_TIM1_Init(void) {
 	sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
 	sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_UPDATE;
 	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_ENABLE;
-	if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig)
-			!= HAL_OK) {
+	if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK) {
 		Error_Handler();
 	}
 
@@ -1403,12 +1374,10 @@ static void MX_TIM1_Init(void) {
 	sConfigOC.OCFastMode = TIM_OCFAST_ENABLE;
 	sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
 	sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_SET;
-	if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1)
-			!= HAL_OK) {
+	if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1) != HAL_OK) {
 		Error_Handler();
 	}
-	if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_2)
-			!= HAL_OK) {
+	if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_2) != HAL_OK) {
 		Error_Handler();
 	}
 
@@ -1423,8 +1392,7 @@ static void MX_TIM1_Init(void) {
 	sBreakDeadTimeConfig.Break2Polarity = TIM_BREAK2POLARITY_HIGH;
 	sBreakDeadTimeConfig.Break2Filter = 0;
 	sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
-	if (HAL_TIMEx_ConfigBreakDeadTime(&htim1, &sBreakDeadTimeConfig)
-			!= HAL_OK) {
+	if (HAL_TIMEx_ConfigBreakDeadTime(&htim1, &sBreakDeadTimeConfig) != HAL_OK) {
 		Error_Handler();
 	}
 
@@ -1459,8 +1427,7 @@ static void MX_TIM3_Init(void) {
 
 	sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
 	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-	if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig)
-			!= HAL_OK) {
+	if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK) {
 		Error_Handler();
 	}
 
@@ -1493,8 +1460,7 @@ static void MX_TIM4_Init(void) {
 
 	sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
 	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-	if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig)
-			!= HAL_OK) {
+	if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK) {
 		Error_Handler();
 	}
 
@@ -1531,8 +1497,7 @@ static void MX_TIM8_Init(void) {
 	sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
 	sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_UPDATE;
 	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_ENABLE;
-	if (HAL_TIMEx_MasterConfigSynchronization(&htim8, &sMasterConfig)
-			!= HAL_OK) {
+	if (HAL_TIMEx_MasterConfigSynchronization(&htim8, &sMasterConfig) != HAL_OK) {
 		Error_Handler();
 	}
 
@@ -1543,13 +1508,11 @@ static void MX_TIM8_Init(void) {
 	sConfigOC.OCFastMode = TIM_OCFAST_ENABLE;
 	sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
 	sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_SET;
-	if (HAL_TIM_PWM_ConfigChannel(&htim8, &sConfigOC, TIM_CHANNEL_1)
-			!= HAL_OK) {
+	if (HAL_TIM_PWM_ConfigChannel(&htim8, &sConfigOC, TIM_CHANNEL_1) != HAL_OK) {
 		Error_Handler();
 	}
 
-	if (HAL_TIM_PWM_ConfigChannel(&htim8, &sConfigOC, TIM_CHANNEL_2)
-			!= HAL_OK) {
+	if (HAL_TIM_PWM_ConfigChannel(&htim8, &sConfigOC, TIM_CHANNEL_2) != HAL_OK) {
 		Error_Handler();
 	}
 
@@ -1564,8 +1527,7 @@ static void MX_TIM8_Init(void) {
 	sBreakDeadTimeConfig.Break2Polarity = TIM_BREAK2POLARITY_HIGH;
 	sBreakDeadTimeConfig.Break2Filter = 0;
 	sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
-	if (HAL_TIMEx_ConfigBreakDeadTime(&htim8, &sBreakDeadTimeConfig)
-			!= HAL_OK) {
+	if (HAL_TIMEx_ConfigBreakDeadTime(&htim8, &sBreakDeadTimeConfig) != HAL_OK) {
 		Error_Handler();
 	}
 

@@ -7,16 +7,6 @@
 
 #include "ButtonControl.h"
 
-
-extern TIM_HandleTypeDef htim2;
-extern TIM_HandleTypeDef htim4;
-extern TIM_HandleTypeDef htim3;
-extern float Input1;
-extern float Input2;
-extern float Setpoint1;
-extern float Setpoint2;
-extern FDC2212 capSense;
-
 /* Null, because instance will be initialized on demand. */
 ButtonControl* ButtonControl::instance = 0;
 
@@ -37,48 +27,81 @@ ButtonControl::ButtonControl() {
 	lastSetPosition = position::top;
 	botomPosition = 0;
 	topPosition = 0;
+	dCap_dT_trigger = 20377000;
+	X = 0.3;
+	v = 0;
+	ledBlinkCount = 0;
+	currentBlinkNo = 0;
 }
 
 ButtonControl::~ButtonControl() {
 	// TODO Auto-generated destructor stub
 }
 
-void ButtonControl::blinkLed(uint8_t noTimes) {
-	HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
-	for (int i = 0; i < noTimes; i++) {
-		HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-		HAL_Delay(200);
-	}
-}
-
 void ButtonControl::valueReceived(float dCap_dT) {
-	if (timeCapStart == 0 && dCap_dT < dCap_dT_trigger)
+	char buf1[30];
+
+	char f1[15];
+	v = X * dCap_dT + (1 - X) * v;    // low bandpass filter
+
+	sprintf(f1, "%s\n", ftoa(f1, v, 3));
+
+	uint8_t ret = printUsb(f1);
+
+	// at least 1 second from last event
+	if (HAL_GetTick() - timeCapEnd < 2000)
+		return;
+
+	if (dCap_dT == 0)
+		return;
+
+	if (timeCapStart == 0 && dCap_dT < dCap_dT_trigger) {
 		timeCapStart = HAL_GetTick();
+		timeCapEnd = 0;
+	}
 
 	if (timeCapStart > 0 && dCap_dT > dCap_dT_trigger)
 		timeCapEnd = HAL_GetTick();
 
-	if ((timeCapEnd - timeCapStart) < 1000) {
-		if (currentPosition == position::bottom && botomPosition > 0) {
-			Setpoint1 = botomPosition;
-			Setpoint2 = botomPosition;
+	uint32_t deltaTime = (timeCapEnd - timeCapStart);
+	if (deltaTime == 0)
+		return;
+
+	if (deltaTime > 100 && deltaTime < 1000) {
+		this->enableLed(100, 2);
+		if (currentPosition == position::bottom) {
+			sprintf(buf1, "ButtonControl: goTOP\n");
+			uint8_t ret = printUsb(buf1);
+			if (botomPosition > 0) {
+				Setpoint1 = botomPosition;
+				Setpoint2 = botomPosition;
+			}
 			currentPosition = position::top;
-		} else if (topPosition > 0) {
-			Setpoint1 = topPosition;
-			Setpoint2 = topPosition;
+		} else if (currentPosition == position::top) {
+			sprintf(buf1, "ButtonControl: goBOTTOM\n");
+			uint8_t ret = printUsb(buf1);
+			if (topPosition > 0) {
+				Setpoint1 = topPosition;
+				Setpoint2 = topPosition;
+			}
 			currentPosition = position::bottom;
 		}
 		timeCapStart = 0;
-		timeCapEnd = 0;
-	} else if ((timeCapEnd - timeCapStart) > 1000 && (timeCapEnd - timeCapStart) < 2000) {
+	} else if (deltaTime > 2000 && deltaTime < 3000) {
 		if (this->currentMode == ButtonControl::mode::both) {
 			this->currentMode = ButtonControl::mode::left;
+			sprintf(buf1, "ButtonControl: left\n");
+			printUsb(buf1);
 			this->enableLed();
 		} else if (this->currentMode == ButtonControl::mode::left) {
 			this->currentMode = ButtonControl::mode::right;
+			sprintf(buf1, "ButtonControl: right\n");
+			printUsb(buf1);
 			this->enableLed();
 		} else if (this->currentMode == ButtonControl::mode::right) {
 			this->currentMode = ButtonControl::mode::both;
+			sprintf(buf1, "ButtonControl: both\n");
+			printUsb(buf1);
 			this->disableLed();
 			htim3.Instance->CNT = Input1;
 			htim4.Instance->CNT = Input1;
@@ -86,25 +109,46 @@ void ButtonControl::valueReceived(float dCap_dT) {
 			Setpoint2 = Input1;
 		}
 		timeCapStart = 0;
-		timeCapEnd = 0;
-	} else if (HAL_GetTick() - timeCapStart  > 4000) {
+	} else if (timeCapStart > 0 && HAL_GetTick() - timeCapStart > 4000) {
 		//setting top position
 		if (lastSetPosition == position::top) {
 			this->botomPosition = Input1;
 			lastSetPosition = position::bottom;
-			this->blinkLed(2);
+			this->enableLed(80,10);
+			sprintf(buf1, "ButtonControl: BOTOM Position set.\n");
+			printUsb(buf1);
 		} else {
 			this->topPosition = Input1;
 			lastSetPosition = position::top;
-			this->blinkLed(4);
+			this->enableLed(160,10);
+			sprintf(buf1, "ButtonControl: TOP Position set.\n");
+			printUsb(buf1);
 		}
 		timeCapStart = 0;
-		timeCapEnd = 0;
 	}
 }
 
 void ButtonControl::enableLed() {
 	htim2.Init.Period = ButtonControl::currentMode * 500;
+	HAL_TIM_Base_Init(&htim2);
+	if (!(htim2.Instance->CR1 & TIM_CR1_CEN)) {
+		HAL_TIM_Base_Start_IT(&htim2);
+	}
+}
+
+void ButtonControl::enableLed(uint32_t period) {
+	htim2.Init.Period = period;
+	HAL_TIM_Base_Init(&htim2);
+	if (!(htim2.Instance->CR1 & TIM_CR1_CEN)) {
+		HAL_TIM_Base_Start_IT(&htim2);
+	}
+}
+
+void ButtonControl::enableLed(uint32_t period, uint8_t blinkCount) {
+	HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
+	htim2.Init.Period = period;
+	ledBlinkCount = blinkCount;
+	currentBlinkNo = 0;
 	HAL_TIM_Base_Init(&htim2);
 	if (!(htim2.Instance->CR1 & TIM_CR1_CEN)) {
 		HAL_TIM_Base_Start_IT(&htim2);

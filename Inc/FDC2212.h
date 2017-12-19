@@ -55,6 +55,7 @@ public:
     unsigned long capMin;
     float dCap_dT;
     static FDC2212 *getInstance();
+    long lastReadingTick;
 
 private:
     void loadSettings(void);
@@ -68,7 +69,6 @@ private:
     uint8_t _i2caddr;
     I2C_HandleTypeDef _i2cHandle;
     unsigned long lastReading;
-    long lastReadingTick;
     double angle;
 
     bool isReading;

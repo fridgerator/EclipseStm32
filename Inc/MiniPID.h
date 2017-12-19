@@ -1,9 +1,6 @@
 #ifndef MINIPID_H
 #define MINIPID_H
 
-#define AUTOMATIC 1
-#define MANUAL 0
-
 #include <stdint.h>
 #include "math.h"
 
@@ -40,6 +37,9 @@ public:
 	void setTunings(double, double, double);
 	double getMaxOutput();
 	double getMinOutput();
+
+	uint8_t AUTOMATIC=1;
+	uint8_t MANUAL=0;
 
 private:
 	bool bounded(double, double, double);
