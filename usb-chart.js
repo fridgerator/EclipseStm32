@@ -40,8 +40,8 @@ app.use(express.static('.'));
 io.on('connection', function(socket){
   console.log('a user connected');
 });
-http.listen(8080, function(){
-  console.log('listening on *:8080');
+http.listen(3000, function(){
+  console.log('listening on *:3000');
 });
 
 
@@ -55,40 +55,61 @@ socket.on('disconnect', function(){});
 
 
 
-/*
 // serial port version START
 
+
+
 const SerialPort = require('serialport');
-const parsers = SerialPort.parsers;
 
-// Use a `\r\n` as a line terminator
-const parser = new parsers.Readline({
-  delimiter: '\n'
+var comName = '';
+SerialPort.list((err, ports) => {
+  console.log("error: " + err);
+  var foundPort = false;
+  ports.forEach((port) => {
+    console.log(port.vendorId + " " + port.productId + " " + port.comName + " condition: " + (port.vendorId == "0483" && port.productId== "5740"));
+    if (port.vendorId == "0483" && port.productId== "5740") {
+      console.log("1111111111111111111111111111111");
+      console.log(port.comName);
+      console.log("2222222222222222222222222222222");
+      foundPort = true;
+      comName=port.comName;
+      console.log(comName);
+      
+      const parsers = SerialPort.parsers;
+
+      // Use a `\r\n` as a line terminator
+      const parser = new parsers.Readline({
+	delimiter: '\n'
+      });
+
+      const port = new SerialPort(comName, {
+	baudRate: 115200
+      });
+
+      port.pipe(parser);
+      port.on('open', () => console.log('Port open'));
+
+      parser.on('data', function(data) {
+	console.log(data);
+	if(data.startsWith("ButtonControl"))
+	  console.log(data);
+	else
+	  io.emit('message',data);
+      });      
+      
+      
+    }
+  });
 });
 
-const port = new SerialPort('/dev/ttyACM2', {
-  baudRate: 115200
-});
 
-port.pipe(parser);
-port.on('open', () => console.log('Port open'));
-
-
-parser.on('data', function(data) {
-  //console.log(data);
-  if(data.startsWith("ButtonControl"))
-    console.log(data);
-  else
-    io.emit('message',data);
-});
-*/
 
 // serial port version END
 
 
 
 
-
+/*
 const usb = require("usb");
 usb.setDebugLevel(4);
 var dev = usb.findByIds(0x0483, 0x5740);
@@ -137,3 +158,4 @@ inEndpoint.on('end',function()
 }
 );
 
+*/

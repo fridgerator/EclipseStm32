@@ -1,9 +1,9 @@
 # Example configuration file for using orbuculum with BMP
 # ...either a genuine one, or a 'Bluepill' variant
-source /home/klemen/git/orbuculum/Support/gdbtrace.init
+source ~/git/orbuculum/Support/gdbtrace.init
 target extended-remote /dev/ttyBmpGdb
 monitor swdp_scan
-file /home/klemen/git/EclipseStm32/Debug/EclipseStm32.elf
+file ~/git/EclipseStm32/Debug/EclipseStm32.elf
 attach 1
 set mem inaccessible-by-default off
 set print pretty

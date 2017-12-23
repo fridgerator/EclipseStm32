@@ -27,7 +27,7 @@ ButtonControl::ButtonControl() {
 	lastSetPosition = position::top;
 	botomPosition = 0;
 	topPosition = 0;
-	dCap_dT_trigger = 20377000;
+	dCap_dT_trigger = 20382000;
 	X = 0.3;
 	v = 0;
 	ledBlinkCount = 0;
@@ -39,14 +39,14 @@ ButtonControl::~ButtonControl() {
 }
 
 void ButtonControl::valueReceived(float dCap_dT) {
-	char buf1[30];
+	//char buf1[30];
 
-	char f1[15];
+	//char f1[15];
 	v = X * dCap_dT + (1 - X) * v;    // low bandpass filter
 
-	sprintf(f1, "%s\n", ftoa(f1, v, 3));
-
-	uint8_t ret = printUsb(f1);
+	//sprintf(f1, "%s\n", ftoa(f1, v, 3));
+	//uint8_t ret = printUsb(f1);
+	ITM_SendChar(static_cast<int>(dCap_dT));
 
 	// at least 1 second from last event
 	if (HAL_GetTick() - timeCapEnd < 2000)
@@ -70,16 +70,16 @@ void ButtonControl::valueReceived(float dCap_dT) {
 	if (deltaTime > 100 && deltaTime < 1000) {
 		this->enableLed(100, 2);
 		if (currentPosition == position::bottom) {
-			sprintf(buf1, "ButtonControl: goTOP\n");
-			uint8_t ret = printUsb(buf1);
+			//sprintf(buf1, "ButtonControl: goTOP\n");
+			//uint8_t ret = printUsb(buf1);
 			if (botomPosition > 0) {
 				Setpoint1 = botomPosition;
 				Setpoint2 = botomPosition;
 			}
 			currentPosition = position::top;
 		} else if (currentPosition == position::top) {
-			sprintf(buf1, "ButtonControl: goBOTTOM\n");
-			uint8_t ret = printUsb(buf1);
+			//sprintf(buf1, "ButtonControl: goBOTTOM\n");
+			//uint8_t ret = printUsb(buf1);
 			if (topPosition > 0) {
 				Setpoint1 = topPosition;
 				Setpoint2 = topPosition;
@@ -90,18 +90,18 @@ void ButtonControl::valueReceived(float dCap_dT) {
 	} else if (deltaTime > 2000 && deltaTime < 3000) {
 		if (this->currentMode == ButtonControl::mode::both) {
 			this->currentMode = ButtonControl::mode::left;
-			sprintf(buf1, "ButtonControl: left\n");
-			printUsb(buf1);
+			//sprintf(buf1, "ButtonControl: left\n");
+			//printUsb(buf1);
 			this->enableLed();
 		} else if (this->currentMode == ButtonControl::mode::left) {
 			this->currentMode = ButtonControl::mode::right;
-			sprintf(buf1, "ButtonControl: right\n");
-			printUsb(buf1);
+			//sprintf(buf1, "ButtonControl: right\n");
+			//printUsb(buf1);
 			this->enableLed();
 		} else if (this->currentMode == ButtonControl::mode::right) {
 			this->currentMode = ButtonControl::mode::both;
-			sprintf(buf1, "ButtonControl: both\n");
-			printUsb(buf1);
+			//sprintf(buf1, "ButtonControl: both\n");
+			//printUsb(buf1);
 			this->disableLed();
 			htim3.Instance->CNT = Input1;
 			htim4.Instance->CNT = Input1;
@@ -115,14 +115,14 @@ void ButtonControl::valueReceived(float dCap_dT) {
 			this->botomPosition = Input1;
 			lastSetPosition = position::bottom;
 			this->enableLed(80,10);
-			sprintf(buf1, "ButtonControl: BOTOM Position set.\n");
-			printUsb(buf1);
+			//sprintf(buf1, "ButtonControl: BOTOM Position set.\n");
+			//printUsb(buf1);
 		} else {
 			this->topPosition = Input1;
 			lastSetPosition = position::top;
 			this->enableLed(160,10);
-			sprintf(buf1, "ButtonControl: TOP Position set.\n");
-			printUsb(buf1);
+			//sprintf(buf1, "ButtonControl: TOP Position set.\n");
+			//printUsb(buf1);
 		}
 		timeCapStart = 0;
 	}

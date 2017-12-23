@@ -338,6 +338,17 @@ void HAL_Delay(__IO uint32_t Delay) {
 	}
 }
 
+void ITM_Out(uint32_t port, uint32_t ch) {
+	while (ITM->PORT[port].u32 == 0)
+		;
+	ITM->PORT[port].u8 = (uint8_t) ch;
+}
+void swvPrint(int port, char* ptr, int len) {
+	int i = 0;
+	for (i = 0; i < len; i++)
+		ITM_Out(port, (uint32_t) *ptr++);
+}
+
 uint8_t printUsb(const char* buf) {
 	uint16_t Len = strlen(buf);
 

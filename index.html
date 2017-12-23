@@ -29,23 +29,20 @@
 	socket.on('message', function(msg){
 	  value = parseInt(msg);
 	  if (config.data.datasets.length > 0 && value>0) {
-	    config.data.labels.push(newDate(config.data.labels.length));
+	    //config.data.labels.push(newDate(config.data.labels.length));
 	    now1=now();
+	    var res = msg.split(" ");
 	    for (var index = 0; index < config.data.datasets.length; ++index) {
 
 	      config.data.datasets[index].data.push({
 		      x: now1,
-		      y: msg,
+		      y: res[index],
 	      });
-	      
-	      
-	      /*
 	      if(config.data.datasets[index].data.length>100)
 	      {
 		config.data.datasets[index].data.splice(0, 1);
 		window.myLine.update();
 	      }
-	      */
 	    }
 
 	    window.top.myLine.update();
@@ -75,7 +72,7 @@
 			type: 'line',
 			data: {
 				labels: [ // Date Objects
-					newDate(0)
+					//newDate(0)
 				],
 				datasets: [
 				{
@@ -84,7 +81,23 @@
 					borderColor: window.chartColors.green,
 					fill: false,
 					data: [],
-				}]
+				},
+				{
+					label: "Dataset with point data",
+					backgroundColor: color(window.chartColors.red).alpha(0.5).rgbString(),
+					borderColor: window.chartColors.red,
+					fill: false,
+					data: [],
+				},
+				{
+					label: "Dataset with point data",
+					backgroundColor: color(window.chartColors.blue).alpha(0.5).rgbString(),
+					borderColor: window.chartColors.blue,
+					fill: false,
+					data: [],
+				}				
+				
+				]
 			},
 			options: {
 		responsive: true,

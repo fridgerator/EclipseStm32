@@ -122,6 +122,9 @@ extern "C" {
 #endif
 uint8_t printUsb(const char* buf);
 char *ftoa(char *a, double f, int precision);
+void ITM_Out(uint32_t, uint32_t);
+void swvPrint(int, char*, int);
+
 
 void _Error_Handler(char *, int);
 
