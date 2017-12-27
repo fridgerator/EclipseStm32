@@ -14,6 +14,16 @@
 //idProduct          0x5740 STM32F407
 
 
+
+// /usr/local/n/versions/node/9.2.1/bin/npm rebuild
+
+
+// debugging:
+// nodejs --inspect --debug-brk ./usb-chart.js
+// then open in chrome browser: chrome://inspect
+// 	and step through code
+
+
 'use strict';
 
 // Use a Readline parser
@@ -60,20 +70,18 @@ socket.on('disconnect', function(){});
 
 
 const SerialPort = require('serialport');
+var port;
 
 var comName = '';
 SerialPort.list((err, ports) => {
   console.log("error: " + err);
   var foundPort = false;
   ports.forEach((port) => {
-    console.log(port.vendorId + " " + port.productId + " " + port.comName + " condition: " + (port.vendorId == "0483" && port.productId== "5740"));
+    console.log(port.vendorId + " " + port.productId + " " + port.comName + " condition: " + (port.vendorId == "0483" && port.productId== "5740") + " commName: " + port.comName);
+    var comName=port.comName
     if (port.vendorId == "0483" && port.productId== "5740") {
-      console.log("1111111111111111111111111111111");
-      console.log(port.comName);
-      console.log("2222222222222222222222222222222");
-      foundPort = true;
-      comName=port.comName;
       console.log(comName);
+      foundPort = true;
       
       const parsers = SerialPort.parsers;
 
@@ -90,7 +98,7 @@ SerialPort.list((err, ports) => {
       port.on('open', () => console.log('Port open'));
 
       parser.on('data', function(data) {
-	console.log(data);
+	//console.log(data);
 	if(data.startsWith("ButtonControl"))
 	  console.log(data);
 	else

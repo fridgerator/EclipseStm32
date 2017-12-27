@@ -67,6 +67,7 @@
 extern uint8_t received_data[];
 extern uint32_t received_data_size;
 extern uint32_t receive_total;
+extern USBD_HandleTypeDef hUsbDeviceFS;
 /* USER CODE END PRIVATE_TYPES */ 
 /**
   * @}
@@ -116,7 +117,6 @@ uint8_t UserTxBufferFS[APP_TX_DATA_SIZE];
 /** @defgroup USBD_CDC_IF_Exported_Variables
   * @{
   */ 
-  extern USBD_HandleTypeDef hUsbDeviceFS;
 /* USER CODE BEGIN EXPORTED_VARIABLES */
 /* USER CODE END EXPORTED_VARIABLES */
 

@@ -2,16 +2,25 @@
 // npm install serialport
 // sudo apt-get install libudev-dev
 // npm install usb
-// npm install socket.io
+
 // npm install -g socket.io
-// npm install @types/socket.io-client --save
-// npm install express
-// npm install tail
-// npm install sleep
+
+
+
+
+
 
 
 // start with: node usb-chart.js
 
+
+
+// npm install express
+// npm install socket.io
+// npm install @types/socket.io-client --save
+// npm install socket.io-client --save
+// npm install tail
+// npm install sleep
 
 //idVendor           0x0483 STMicroelectronics
 //idProduct          0x5740 STM32F407
@@ -56,49 +65,54 @@ socket.on('disconnect', function(){});
 
 
 
-
     
 var fileName = '/home/klemen/temp/out.txt';
 var sleep = require('sleep');
 
 
-// /home/klemen/bin/armgcc/bin/arm-none-eabi-gdb -x .gdbinit
+// /home/klemen/bin/armgcc/bin/arm-none-eabi-gdb -x /home/klemen/git/EclipseStm32/.mygdbinit
 const fork0 = require('child_process').spawn;
-const gdb = fork0('/home/klemen/bin/armgcc/bin/arm-none-eabi-gdb',['-x', '/home/klemen/git/EclipseStm32/.gdbinit', '-e', '/home/klemen/git/EclipseStm32/Debug/EclipseStm32.elf'], { silent: true });
+var fork1;
+var fork2;
+const gdb = fork0('/home/klemen/bin/armgcc/bin/arm-none-eabi-gdb',['-x', '/home/klemen/git/EclipseStm32/.mygdbinit'], { silent: true });
 
 gdb.stdout.on('data', function(data) {
     console.log('gdb stdout: ' + data);
-    sleep.sleep(15);
-    
-    const fork1 = require('child_process').spawn;
-    const orbuculum = fork1('/home/klemen/git/orbuculum/ofiles/orbuculum',['-c', '0,temperature,\\"%d \\"', '-c', '1,measurement1,\\"%d \\"', '-c', '2,measurement2,\\"%d \\"', '-v', '4'], { silent: true });
-
-    orbuculum.stdout.on('data', function(data1) {
-      console.log('orbuculum stdout: ' + data1);
-      console.log('sleep 3sec.');
-      sleep.sleep(10);
-      const fork2 = require('child_process').spawn;
-      const orbcat = fork2('/home/klemen/git/orbuculum/ofiles/orbcat', ['-c', '0,\\"{a:\\\"%d\\\",\\"', '-c', '1,\\"b:\\\"%d\\\",\\"', '-c', '2,\\"c:\\\"%d\\\"};\n"','>', fileName], { silent: true });  
+    if(!fork1 && data.indexOf('HAL_Init') !== -1)
+    {
+      fork1 = require('child_process').spawn;
+      // /home/klemen/git/orbuculum/ofiles/orbuculum -c 0,capValue,\"%d\" -v 2
+      console.log('Starting ORBUCULUM');
+      const orbuculum = fork1('/home/klemen/git/orbuculum/ofiles/orbuculum',['v', '2', 'c', '0,capValue,\\"%d\\"'], { silent: true });
       
-      orbcat.stdout.on('data', function(data2){
-	console.log('orbcat stdout: ' + data2);
+      orbuculum.stdout.on('data', function(data1) {
+	console.log('orbuculum stdout: ' + data1);
+	if(!fork2){
+	  fork2 = require('child_process').spawn;
+	  console.log('Starting ORBCAT');
+	  // /home/klemen/git/orbuculum/ofiles/orbcat -c '0,\"%d\"\n' > fileName
+	  const orbcat = fork2('/home/klemen/git/orbuculum/ofiles/orbcat', ['-c', '0,%d\n', '>', fileName], { silent: true });  
+	  
+	  orbcat.stdout.on('data', function(data2){
+	    console.log('orbcat stdout: ' + data2);
+	    
+	  });
+	  orbcat.stderr.on('data', function(data3){
+	    console.log('orbcat err: ' + data3);
+	  });
+	  orbcat.on('close', function(code1){
+	    console.log('orbcat child process exited with code ' + code1);
+	  });
+	}
 	
       });
-      orbcat.stderr.on('data', function(data3){
-	console.log('orbcat err: ' + data3);
+      orbuculum.stderr.on('data', function(data4){
+	console.log('orbuculum err:' + data4);
       });
-      orbcat.on('close', function(code1){
-	console.log('orbcat child process exited with code ' + code1);
+      orbuculum.on('close', function(code2){
+	console.log('orbuculum child process exited with code ' + code2);
       });
-    
-      
-    });
-    orbuculum.stderr.on('data', function(data4){
-      console.log('orbuculum err:' + data4);
-    });
-    orbuculum.on('close', function(code2){
-      console.log('orbuculum child process exited with code ' + code2);
-    });
+    }
 });
 gdb.stderr.on('data', function(data5){
   console.log('gdb err: ' + data5);
@@ -121,3 +135,5 @@ tail.on("line", function(data) {
 tail.on("error", function(error) {
   console.log('ERROR: ', error);
 });
+
+

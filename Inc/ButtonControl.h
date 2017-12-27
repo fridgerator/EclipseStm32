@@ -12,12 +12,12 @@
 extern "C" {
 #endif
 
-#include "main.h"
 #include "stdint.h"
 #include "stm32f3xx_hal.h"
 #include "stm32f3xx_hal_tim.h"
 #include "limits.h"
 #include "math.h"
+#include "usb_device.h"
 
 #include "FDC2212.h"
 
@@ -62,16 +62,20 @@ private:
 
 	ulong capMin;
 	ulong capMax;
-	float dCap_dT_trigger = 0;   // touched: 26646406, nottouched: 28121845
-	long timeCapStart;
-	long timeCapEnd;
+	float maDiffTrigger = 0;   // touched: 26646406, nottouched: 28121845
+	uint32_t timeCapStart;
+	uint32_t timeCapEnd;
 	position lastSetPosition;
 	long botomPosition;
 	long topPosition;
 	double v;
+	double v1;
 	double X;
+	double X1;
 
 	static ButtonControl* instance;
+	uint32_t count;
+	int32_t maDiff;
 
 };
 

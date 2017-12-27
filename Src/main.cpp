@@ -63,7 +63,6 @@
 #include "ButtonControl.h"
 #include "stm32f3xx_hal_dma.h"
 #include "stm32f3xx_hal.h"
-#include "usb_device.h"
 #include "MiniPID.h"
 
 #define IRQ_STATE_DISABLED (0x00000001)
@@ -71,6 +70,8 @@
 static inline uint8_t query_irq(void) {
 	return __get_PRIMASK();
 }
+
+
 
 #define SIXSECONDS (6*1000L) // three seconds are 3000 milliseconds
 #define THREESECONDS (3*1000L) // three seconds are 3000 milliseconds
@@ -109,6 +110,10 @@ TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim4;
 TIM_HandleTypeDef htim8;
 TIM_HandleTypeDef htim2;
+
+extern USBD_HandleTypeDef hUsbDeviceFS;
+
+
 
 //http://www.ti.com/lit/ds/symlink/fdc2212.pdf
 //I2C Address selection pin: when  ADDR=L, I2C address = 0x2A, when ADDR=H, I2C address = 0x2B.
@@ -347,6 +352,26 @@ void swvPrint(int port, char* ptr, int len) {
 	int i = 0;
 	for (i = 0; i < len; i++)
 		ITM_Out(port, (uint32_t) *ptr++);
+}
+
+char *trimwhitespace(char *str)
+{
+  char *end;
+
+  // Trim leading space
+  while(isspace((unsigned char)*str)) str++;
+
+  if(*str == 0)  // All spaces?
+    return str;
+
+  // Trim trailing space
+  end = str + strlen(str) - 1;
+  while(end > str && isspace((unsigned char)*end)) end--;
+
+  // Write new null terminator
+  *(end+1) = 0;
+
+  return str;
 }
 
 uint8_t printUsb(const char* buf) {

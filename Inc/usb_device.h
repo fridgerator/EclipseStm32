@@ -58,7 +58,12 @@
 #include "stm32f3xx_hal.h"
 #include "usbd_def.h"
 
-extern USBD_HandleTypeDef hUsbDeviceFS;
+#include "usbd_desc.h"
+#include "usbd_cdc.h"
+#include "usbd_cdc_if.h"
+#include "usbd_conf.h"
+
+/* USB Device Core handle declaration */
 
 /* USB_Device init function */	
 void MX_USB_DEVICE_Init(void);

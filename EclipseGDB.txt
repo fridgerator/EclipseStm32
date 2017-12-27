@@ -1,0 +1,8 @@
+source /home/klemen/git/orbuculum/Support/gdbtrace.init
+target extended-remote /dev/ttyBmpGdb
+monitor swdp_scan
+attach 1
+set mem inaccessible-by-default off
+set print pretty
+enablestm32swd
+

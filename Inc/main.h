@@ -62,6 +62,8 @@
 
 /* USER CODE BEGIN Includes */
 #include <stdint.h>
+#include "usbd_def.h"
+
 
 #define SWO_Pin GPIO_PIN_3
 #define SWO_GPIO_Port GPIOB
@@ -124,6 +126,7 @@ uint8_t printUsb(const char* buf);
 char *ftoa(char *a, double f, int precision);
 void ITM_Out(uint32_t, uint32_t);
 void swvPrint(int, char*, int);
+char *trimwhitespace(char*);
 
 
 void _Error_Handler(char *, int);

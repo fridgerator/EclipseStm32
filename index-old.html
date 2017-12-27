@@ -1,0 +1,146 @@
+<!doctype html>
+<html>
+
+<head>
+    <title>Line Chart</title>
+    <script src="/node_modules/chart.js/dist/Chart.bundle.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.13.0/moment.min.js"></script>
+    <script src="/node_modules/chart.js/samples/utils.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+    canvas{
+        -moz-user-select: none;
+        -webkit-user-select: none;
+        -ms-user-select: none;
+    }
+    </style>
+</head>
+
+<body>
+    <div>
+        <canvas id="canvas"></canvas>
+    </div>
+    <br>
+    <br>
+    
+    <script>
+	var socket = io();
+	
+	socket.on('message', function(msg){
+	  value = parseInt(msg);
+	  if (config.data.datasets.length > 0 && value>0) {
+	    //config.data.labels.push(newDate(config.data.labels.length));
+	    now1=now();
+	    var res = msg.split(" ");
+	    for (var index = 0; index < config.data.datasets.length; ++index) {
+
+	      config.data.datasets[index].data.push({
+		      x: now1,
+		      y: res[index],
+	      });
+	      if(config.data.datasets[index].data.length>250)
+	      {
+		config.data.datasets[index].data.splice(0, 1);
+		window.myLine.update();
+	      }
+	    }
+	    window.top.myLine.update();
+	  }
+	});
+	    
+	var timeFormat = 'MM/DD/YYYY HH:mm:ss:millisecond';
+
+		function newDate(days) {
+			return moment().add(days, 'milisecond').toDate();
+		}
+
+		function newDateString(days) {
+			return moment().add(days, 'milisecond').format(timeFormat);
+		}
+
+		function newTimestamp(days) {
+			return moment().add(days, 'milisecond').unix();
+		}
+
+		function now() {
+			return moment().toDate();
+		}		
+		
+		var color = Chart.helpers.color;
+		var config = {
+			type: 'line',
+			data: {
+				labels: [ // Date Objects
+					//newDate(0)
+				],
+				datasets: [
+				{
+					label: "Dataset with point data",
+					backgroundColor: color(window.chartColors.green).alpha(0.5).rgbString(),
+					borderColor: window.chartColors.green,
+					fill: false,
+					data: [],
+				},
+				{
+					label: "Dataset with point data",
+					backgroundColor: color(window.chartColors.red).alpha(0.5).rgbString(),
+					borderColor: window.chartColors.red,
+					fill: false,
+					data: [],
+				},
+				{
+					label: "Dataset with point data",
+					backgroundColor: color(window.chartColors.blue).alpha(0.5).rgbString(),
+					borderColor: window.chartColors.blue,
+					fill: false,
+					data: [],
+				}				
+				
+				]
+			},
+			options: {
+		responsive: true,
+		maintainAspectRatio: true,
+                title:{
+                    text: "Chart.js TableLifter data"
+                },
+				scales: {
+					xAxes: [{
+						type: "time",
+						time: {
+							format: timeFormat,
+							// round: 'day',
+							distribution: 'linear',
+							max: 'x_axis_max',
+							min: 'x_axis_min',
+							source: 'data',
+							bounds: 'data',
+							tooltipFormat: 'll HH:mm:ss:milisecond'
+						},
+						scaleLabel: {
+							display: true,
+							labelString: 'Date'
+						}
+					}, ],
+					yAxes: [{
+						scaleLabel: {
+							display: true,
+							labelString: 'value'
+						}
+					}]
+				},
+			}
+		};
+		
+		
+        window.top.onload = function() {
+            var ctx = document.getElementById("canvas").getContext("2d");
+            window.myLine = new Chart(ctx, config);
+        };
+
+        var colorNames = Object.keys(window.chartColors);
+       
+    </script>
+</body>
+
+</html>
